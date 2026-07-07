@@ -5,6 +5,17 @@ echo             UNI XML & XSLT CANLI EDITOR
 echo ===================================================
 echo.
 
+:: Port 5173 zaten dinleniyor mu kontrol et (Arka planda calisiyorsa)
+netstat -an | findstr ":5173" >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [BILGI] Canli sunucu zaten arka planda calisiyor.
+    echo Tarayici sayfaniz aciliyor...
+    echo.
+    start http://localhost:5173
+    timeout /t 2 >nul
+    exit
+)
+
 :: Node.js kontrolü
 node -v >nul 2>&1
 if %errorlevel% neq 0 (
@@ -39,10 +50,13 @@ if not exist node_modules (
 
 echo.
 echo [2/2] Canli sunucu baslatiliyor (npm run dev)...
-echo Sunucu hazir oldugunda tarayiciniz otomatik olarak acilacaktir...
+echo Tarayiciniz otomatik olarak acilacaktir...
 echo.
 
-:: Vite sunucusunu başlat (Vite otomatik olarak tarayıcıyı açacaktır)
+:: Tarayıcıyı garanti şekilde aç
+start http://localhost:5173
+
+:: Vite sunucusunu başlat
 call npm run dev
 if %errorlevel% neq 0 (
     echo.
