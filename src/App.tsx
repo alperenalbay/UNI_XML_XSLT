@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import Editor from '@monaco-editor/react'
 import { 
   FileCode, 
@@ -20,14 +20,15 @@ import {
   ZoomIn,
   ZoomOut,
   Target,
-  FileText,
   FilePlus2,
   Plus,
   Compass,
   LayoutGrid,
   RotateCw,
   Sliders,
-  Palette
+  Palette,
+  Languages,
+  Edit3
 } from 'lucide-react'
 import { 
   transformXmlWithXslt, 
@@ -36,6 +37,8 @@ import {
   updateXsltStyle,
   getXsltStyleValue,
   updateXsltText,
+  updateElementTextInXsltById,
+  updateElementStyleInXsltById,
   swapXsltElements,
   updateWatermarkTextInXslt,
   addElementToXslt,
@@ -43,21 +46,6 @@ import {
 } from './utils/xsltTransformer'
 import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 
-// Whitelisted styleable classes in invoice layout (restricts visual operations to appropriate design containers)
-const STYLEABLE_CLASSES = [
-  'logo-section',
-  'invoice-title',
-  'party-title',
-  'party-card',
-  'supplier-col',
-  'customer-col',
-  'watermark-stamp',
-  'invoice-info-section',
-  'items-table',
-  'totals-table',
-  'grand-total',
-  'custom-text-box'
-]
 
 function App() {
   // XML & XSLT State
@@ -82,8 +70,10 @@ function App() {
   }>({ xmlValid: true, xsltValid: true })
 
   // A4 Preview & Zoom States
-  const [previewLayout, setPreviewLayout] = useState<'A4' | 'fit'>('A4')
+  const [previewLayout] = useState<'A4' | 'fit'>('A4')
   const [zoomPercent, setZoomPercent] = useState<number>(85)
+  const [editorWidthPercent, setEditorWidthPercent] = useState<number>(42)
+  const [isAutoFit, setIsAutoFit] = useState<boolean>(true)
 
   // Inspector & Designer States
   const [inspectorActive, setInspectorActive] = useState<boolean>(false)
@@ -93,6 +83,7 @@ function App() {
   // Selected Element Details (for WYSIWYG Styler)
   const [selectedSelector, setSelectedSelector] = useState<string>('')
   const [selectedElementName, setSelectedElementName] = useState<string>('')
+  const [selectedElementDetails, setSelectedElementDetails] = useState<any>(null)
 
   // CSS values for Selected Element
   const [styleMargin, setStyleMargin] = useState<string>('')
@@ -116,6 +107,38 @@ function App() {
   // Theme color details
   const [themePrimaryColor, setThemePrimaryColor] = useState<string>('#4f46e5')
 
+  // Language State
+  const [invoiceLanguage, setInvoiceLanguage] = useState<'tr' | 'en'>('tr')
+
+  // Custom template library states
+  const [customTemplates, setCustomTemplates] = useState<Array<{ name: string, fileName: string, content: string }>>([])
+  const [saveTemplateName, setSaveTemplateName] = useState('')
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false)
+
+  const loadCustomTemplates = async () => {
+    try {
+      const res = await fetch('/api/list-templates')
+      if (res.ok) {
+        const data = await res.json()
+        setCustomTemplates(data)
+      }
+    } catch (err) {
+      console.error('Failed to load custom templates:', err)
+    }
+  }
+
+  // Load custom templates on mount
+  useEffect(() => {
+    loadCustomTemplates()
+  }, [])
+
+  // Auto reload custom templates list when user visits Status Report tab
+  useEffect(() => {
+    if (previewActiveTab === 'logs') {
+      loadCustomTemplates()
+    }
+  }, [previewActiveTab])
+
   // Drag & Drop State
   const [isDragging, setIsDragging] = useState<boolean>(false)
 
@@ -126,6 +149,72 @@ function App() {
   const xmlEditorRef = useRef<any>(null)
   const xsltEditorRef = useRef<any>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const previewContainerRef = useRef<HTMLDivElement>(null)
+
+  // Auto-fit A4 preview width to preview panel container width
+  useEffect(() => {
+    if (previewActiveTab !== 'preview') return
+
+    const handleResize = () => {
+      if (previewContainerRef.current && isAutoFit) {
+        const width = previewContainerRef.current.clientWidth
+        // 32px padding (16px left + 16px right)
+        const availableWidth = width - 32
+        if (availableWidth > 0) {
+          // Calculate scale percentage to fit 210mm (794px)
+          const fitScale = Math.min(100, Math.floor((availableWidth / 794) * 100))
+          setZoomPercent(Math.max(30, fitScale))
+        }
+      }
+    }
+
+    handleResize()
+
+    const observer = new ResizeObserver(handleResize)
+    if (previewContainerRef.current) {
+      observer.observe(previewContainerRef.current)
+    }
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [previewActiveTab, isAutoFit])
+
+  // Apply visual zoom internally inside the iframe document
+  useEffect(() => {
+    const applyIframeZoom = () => {
+      if (iframeRef.current && previewActiveTab === 'preview') {
+        const iframeDoc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
+        if (iframeDoc && iframeDoc.body) {
+          const scale = zoomPercent / 100
+          
+          // Style the body as an A4 document sheet centered in the slate view
+          iframeDoc.body.style.transform = `scale(${scale})`
+          iframeDoc.body.style.transformOrigin = 'top center'
+          iframeDoc.body.style.width = '210mm'
+          iframeDoc.body.style.minHeight = '297mm'
+          iframeDoc.body.style.margin = '24px auto'
+          iframeDoc.body.style.padding = '10px'
+          iframeDoc.body.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4)'
+          iframeDoc.body.style.backgroundColor = '#ffffff'
+          iframeDoc.body.style.transition = 'transform 0.15s ease-out'
+          
+          // Set root HTML element styling of the iframe to fit the dark theme and scroll natively
+          const htmlEl = iframeDoc.documentElement
+          if (htmlEl) {
+            htmlEl.style.backgroundColor = '#0b0f19' // matching slate-950
+            htmlEl.style.overflowY = 'auto'
+            htmlEl.style.height = '100%'
+            htmlEl.style.padding = '0'
+            htmlEl.style.margin = '0'
+          }
+        }
+      }
+    }
+
+    const timer = setTimeout(applyIframeZoom, 100)
+    return () => clearTimeout(timer)
+  }, [zoomPercent, htmlOutput, previewActiveTab])
 
   const handleXmlEditorMount = (editor: any) => {
     xmlEditorRef.current = editor
@@ -217,182 +306,214 @@ function App() {
     setHasDismissedXslt(false)
   }, [xmlContent])
 
-  // Sync content into iframe (handles Inspector and WYSIWYG editor features)
-  useEffect(() => {
-    if (iframeRef.current && previewActiveTab === 'preview') {
-      const iframeDoc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
-      if (iframeDoc) {
-        iframeDoc.open()
-        if (errorMsg) {
-          iframeDoc.write(`
-            <html>
-              <head>
-                <style>
-                  body { font-family: system-ui, sans-serif; padding: 25px; color: #ef4444; background: #fef2f2; }
-                  pre { background: #fee2e2; padding: 15px; border-radius: 6px; border: 1px solid #fca5a5; overflow-x: auto; font-size: 13px; white-space: pre-wrap; word-wrap: break-word; }
-                  h3 { margin-top: 0; }
-                </style>
-              </head>
-              <body>
-                <h3>⚠️ Tasarım Dönüştürme Hatası</h3>
-                <p>XML ve XSLT eşleştirilirken bir hata oluştu:</p>
-                <pre>${errorMsg.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
-              </body>
-            </html>
-          `)
-        } else {
-          let rawHtml = htmlOutput;
-          // Inject CSS highlights for Inspector or Designer
-          if (rawHtml && !errorMsg) {
-            let styleRules = '';
-            if (inspectorActive) {
-              styleRules = `
-                *:not(html):not(body):hover {
-                  outline: 2px dashed #3b82f6 !important;
-                  outline-offset: -2px !important;
-                  cursor: pointer !important;
-                }
-              `;
-            } else if (designerActive) {
-              styleRules = `
-                *:not(html):not(body):hover {
-                  outline: 2px dashed #a855f7 !important;
-                  outline-offset: -2px !important;
-                  cursor: pointer !important;
-                }
-                .uni-selected-element {
-                  outline: 2.5px solid #a855f7 !important;
-                  outline-offset: -2px !important;
-                  background-color: rgba(168, 85, 247, 0.05) !important;
-                }
-              `;
-            }
-            if (styleRules) {
-              const inspectorStyle = `<style id="uni-interactivity-style">${styleRules}</style>`;
-              rawHtml = rawHtml.replace('</head>', `${inspectorStyle}</head>`);
-            }
+  // Memoize iframe HTML output to prevent reload/desync on state changes (e.g. selection click)
+  const srcDocValue = useMemo(() => {
+    if (errorMsg) {
+      return `
+        <html>
+          <head>
+            <style>
+              body { font-family: system-ui, sans-serif; padding: 25px; color: #ef4444; background: #fef2f2; }
+              pre { background: #fee2e2; padding: 15px; border-radius: 6px; border: 1px solid #fca5a5; overflow-x: auto; font-size: 13px; white-space: pre-wrap; word-wrap: break-word; }
+              h3 { margin-top: 0; }
+            </style>
+          </head>
+          <body>
+            <h3>⚠️ Tasarım Dönüştürme Hatası</h3>
+            <p>XML ve XSLT eşleştirilirken bir hata oluştu:</p>
+            <pre>${errorMsg.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+          </body>
+        </html>
+      `;
+    }
+
+    let rawHtml = htmlOutput;
+    if (rawHtml) {
+      const printStyles = `
+        @media print {
+          html, body {
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: auto !important;
+            height: auto !important;
+            min-height: 0 !important;
+            box-shadow: none !important;
+            transform: none !important;
           }
-          iframeDoc.write(rawHtml || '<p style="padding: 20px; color: #64748b; font-family: sans-serif; text-align: center;">Dönüştürülmüş fatura görüntüsü burada görüntülenecektir.</p>')
-        }
-        iframeDoc.close()
-
-        // Inject Click and Double-click Listeners
-        if (!errorMsg && (inspectorActive || designerActive)) {
-          const innerDoc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
-          if (innerDoc) {
-            
-            // Single Click for selection (both Inspector and Designer)
-            innerDoc.addEventListener('click', (e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              
-              const target = e.target as HTMLElement
-              if (!target) return
-
-              // Heuristic: Sınıf ismi (class) olan en yakın üst elemanı bul (Traverse up parents)
-              let currentElement: HTMLElement | null = target
-              let foundClass = ''
-              let foundTagName = target.tagName.toLowerCase()
-              let foundId = target.id
-
-              while (currentElement && currentElement !== innerDoc.body) {
-                const rawClass = currentElement.className
-                if (rawClass && typeof rawClass === 'string') {
-                  const cleaned = rawClass.replace('uni-selected-element', '').trim()
-                  if (cleaned) {
-                    foundClass = rawClass
-                    foundTagName = currentElement.tagName.toLowerCase()
-                    foundId = currentElement.id
-                    break
-                  }
-                }
-                currentElement = currentElement.parentElement
-              }
-
-              // Visual selection outline highlight inside iframe DOM
-              innerDoc.querySelectorAll('.uni-selected-element').forEach(el => {
-                el.classList.remove('uni-selected-element')
-              })
-              
-              if (designerActive) {
-                if (currentElement) {
-                  currentElement.classList.add('uni-selected-element')
-                } else {
-                  target.classList.add('uni-selected-element')
-                }
-              }
-
-              const text = target.innerText?.trim() || ''
-
-              // Dispatch event to parent window
-              window.parent.postMessage({
-                source: designerActive ? 'xslt-designer-click' : 'xslt-preview-inspector',
-                text,
-                className: foundClass || target.className || '',
-                tagName: foundTagName,
-                id: foundId || target.id || ''
-              }, '*')
-            })
-
-            // Double Click for in-place Text Editing (Only inside whitelisted styleable sections and ONLY for static strings!)
-            if (designerActive) {
-              innerDoc.addEventListener('dblclick', (e) => {
-                const target = e.target as HTMLElement
-                if (target && target.nodeType === Node.ELEMENT_NODE) {
-                  const textVal = (target.innerText || '').trim()
-                  if (!textVal) return
-
-                  // 1. Guard check: only allow editing if the text literally exists in the XSLT template source code
-                  // This prevents trying to edit value-of data fields or expression tags which would corrupt the layout!
-                  const isStaticText = xsltContent.includes(textVal)
-
-                  // 2. Check if this target sits inside a styleable whitelisted zone
-                  let currentElement: HTMLElement | null = target
-                  let isStyleable = false
-                  while (currentElement && currentElement !== innerDoc.body) {
-                    const rawClass = currentElement.className
-                    if (rawClass && typeof rawClass === 'string') {
-                      const classes = rawClass.split(/\s+/).filter(c => c !== 'uni-selected-element')
-                      if (classes.some(c => STYLEABLE_CLASSES.includes(c) || c.startsWith('custom-text-'))) {
-                        isStyleable = true
-                        break
-                      }
-                    }
-                    currentElement = currentElement.parentElement
-                  }
-
-                  // Start edit mode if it's static and leaf node
-                  if (isStaticText && isStyleable && target.children.length === 0) {
-                    target.contentEditable = "true"
-                    target.focus()
-                    target.setAttribute('data-original-text', target.innerText || '')
-                  }
-                }
-              })
-
-              innerDoc.addEventListener('focusout', (e) => {
-                const target = e.target as HTMLElement
-                if (target && target.contentEditable === "true") {
-                  target.contentEditable = "false"
-                  const original = target.getAttribute('data-original-text') || ''
-                  const current = target.innerText || ''
-
-                  if (original && current && original.trim() !== current.trim()) {
-                    window.parent.postMessage({
-                      source: 'xslt-text-edit',
-                      original: original.trim(),
-                      current: current.trim()
-                    }, '*')
-                  }
-                }
-              })
-            }
-
+          .uni-selected-element {
+            outline: none !important;
+            box-shadow: none !important;
+            border-color: transparent !important;
           }
         }
+      `;
+      const printStyleBlock = `<style id="uni-print-style">${printStyles}</style>`;
+      rawHtml = rawHtml.replace('</head>', `${printStyleBlock}</head>`);
+      
+      let styleRules = '';
+      if (inspectorActive) {
+        styleRules = `
+          *:not(html):not(body):hover {
+            outline: 2px dashed #3b82f6 !important;
+            outline-offset: -2px !important;
+            cursor: pointer !important;
+          }
+        `;
+      } else if (designerActive) {
+        styleRules = `
+          *:not(html):not(body):hover {
+            outline: 2px dashed #a855f7 !important;
+            outline-offset: -2px !important;
+            cursor: pointer !important;
+          }
+          .uni-selected-element {
+            outline: 3px solid #a855f7 !important;
+            outline-offset: -1px !important;
+            box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.2), 0 0 12px rgba(168, 85, 247, 0.6) !important;
+            animation: selectPulse 2s infinite ease-in-out !important;
+          }
+          @keyframes selectPulse {
+            0% { box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2), 0 0 6px rgba(168, 85, 247, 0.4) !important; }
+            50% { box-shadow: 0 0 0 6px rgba(168, 85, 247, 0.3), 0 0 16px rgba(168, 85, 247, 0.8) !important; }
+            100% { box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2), 0 0 6px rgba(168, 85, 247, 0.4) !important; }
+          }
+        `;
+      }
+      if (styleRules) {
+        const inspectorStyle = `<style id="uni-interactivity-style">${styleRules}</style>`;
+        rawHtml = rawHtml.replace('</head>', `${inspectorStyle}</head>`);
       }
     }
-  }, [htmlOutput, errorMsg, previewActiveTab, previewLayout, inspectorActive, designerActive, xsltContent])
+    return rawHtml || '<p style="padding: 20px; color: #64748b; font-family: sans-serif; text-align: center;">Dönüştürülmüş fatura görüntüsü burada görüntülenecektir.</p>';
+  }, [htmlOutput, errorMsg, inspectorActive, designerActive])
+
+  // Attach event listeners and apply layout sizing inside the iframe document on load
+  const handleIframeLoad = () => {
+    if (!iframeRef.current) return
+    const innerDoc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
+    if (!innerDoc) return
+
+    // Apply document styling & scale
+    const scale = zoomPercent / 100
+    if (innerDoc.body) {
+      innerDoc.body.style.transform = `scale(${scale})`
+      innerDoc.body.style.transformOrigin = 'top center'
+      innerDoc.body.style.width = '210mm'
+      innerDoc.body.style.minHeight = '297mm'
+      innerDoc.body.style.margin = '24px auto'
+      innerDoc.body.style.padding = '10px'
+      innerDoc.body.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4)'
+      innerDoc.body.style.backgroundColor = '#ffffff'
+      innerDoc.body.style.transition = 'transform 0.15s ease-out'
+    }
+    
+    const htmlEl = innerDoc.documentElement
+    if (htmlEl) {
+      htmlEl.style.backgroundColor = '#0b0f19'
+      htmlEl.style.overflowY = 'auto'
+      htmlEl.style.height = '100%'
+      htmlEl.style.padding = '0'
+      htmlEl.style.margin = '0'
+    }
+
+    // Attach listeners if inspector or designer is active
+    if (!errorMsg && (inspectorActive || designerActive)) {
+      
+      // Click selection listener
+      innerDoc.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        
+        const target = e.target as HTMLElement
+        if (!target) return
+
+        let foundClass = ''
+        let foundTagName = target.tagName.toLowerCase()
+        let foundId = target.id
+
+        if (target.className && typeof target.className === 'string') {
+          const cleaned = target.className.replace('uni-selected-element', '').trim()
+          if (cleaned) {
+            foundClass = target.className
+          }
+        }
+
+        innerDoc.querySelectorAll('.uni-selected-element').forEach(el => {
+          el.classList.remove('uni-selected-element')
+        })
+        
+        if (designerActive) {
+          target.classList.add('uni-selected-element')
+        }
+
+        const text = target.innerText?.trim() || ''
+        const win = innerDoc.defaultView
+        const computed = win ? win.getComputedStyle(target) : {} as any
+        const styles = {
+          margin: target.style.margin || target.style.marginTop || computed.margin || computed.marginTop || '',
+          padding: target.style.padding || target.style.paddingTop || computed.padding || computed.paddingTop || '',
+          fontSize: target.style.fontSize || computed.fontSize || '',
+          color: target.style.color || computed.color || '',
+          width: target.style.width || computed.width || '',
+          textAlign: target.style.textAlign || computed.textAlign || '',
+          fontWeight: target.style.fontWeight || computed.fontWeight || '',
+          fontStyle: target.style.fontStyle || computed.fontStyle || '',
+          textDecoration: target.style.textDecoration || computed.textDecoration || ''
+        }
+
+        window.parent.postMessage({
+          source: designerActive ? 'xslt-designer-click' : 'xslt-preview-inspector',
+          text,
+          className: foundClass || target.className || '',
+          tagName: foundTagName,
+          id: foundId || target.id || '',
+          targetTagName: target.tagName.toLowerCase(),
+          targetSrc: target.getAttribute('src') || '',
+          targetHref: target.getAttribute('href') || '',
+          xsltId: target.getAttribute('data-xslt-id') || '',
+          styles
+        }, '*')
+      })
+
+      // Double-click inline text editor listener
+      innerDoc.addEventListener('dblclick', (e) => {
+        const target = e.target as HTMLElement
+        if (target && target.nodeType === Node.ELEMENT_NODE) {
+          const textVal = (target.innerText || '').trim()
+          if (!textVal) return
+
+          if (target.children.length === 0 || xsltContent.includes(textVal)) {
+            target.contentEditable = "true"
+            target.focus()
+            target.setAttribute('data-original-text', target.innerText || '')
+            target.setAttribute('data-xslt-id-editable', target.getAttribute('data-xslt-id') || '')
+          }
+        }
+      })
+
+      // Focusout inline edit save listener
+      innerDoc.addEventListener('focusout', (e) => {
+        const target = e.target as HTMLElement
+        if (target && target.contentEditable === "true") {
+          target.contentEditable = "false"
+          const original = target.getAttribute('data-original-text') || ''
+          const current = target.innerText || ''
+          const xsltId = target.getAttribute('data-xslt-id') || target.getAttribute('data-xslt-id-editable') || ''
+
+          if (original.trim() !== current.trim()) {
+            window.parent.postMessage({
+              source: 'xslt-text-edit',
+              original: original.trim(),
+              current: current.trim(),
+              xsltId
+            }, '*')
+          }
+        }
+      })
+    }
+  }
 
   // Sync Designer Toolbox values from current XSLT content
   useEffect(() => {
@@ -477,19 +598,23 @@ function App() {
     const handleInspectorMessage = (event: MessageEvent) => {
       if (!event.data) return
 
-      const { source, text, className, tagName, id, original, current } = event.data
+      const { source, text, className, tagName, id, original, current, targetTagName, targetSrc, targetHref, xsltId, styles } = event.data
 
       // Case 1: In-place text modifications (Double clicked leaf texts)
       if (source === 'xslt-text-edit') {
-        // String replacement is 100% safe because we whitelisted double-clicks to only allow static literal labels
-        const updated = updateXsltText(xsltContent, original, current)
+        let updated = xsltContent
+        if (xsltId) {
+          updated = updateElementTextInXsltById(xsltContent, xsltId, current)
+        } else {
+          updated = updateXsltText(xsltContent, original, current)
+        }
         
         if (updated !== xsltContent) {
           updateXsltContent(updated)
           setInspectorStatus(`Metin güncellendi: "${original.substring(0, 10)}..." ➜ "${current.substring(0, 15)}..."`)
           setTimeout(() => setInspectorStatus(null), 3000)
-        }
-      } 
+        } 
+      }
       
       // Case 2: Click in Inspector mode (navigates code)
       else if (source === 'xslt-preview-inspector') {
@@ -506,44 +631,54 @@ function App() {
       
       // Case 3: Click in Designer mode (focuses selector & loads style panel - stays in designer tab!)
       else if (source === 'xslt-designer-click') {
-        const searchTerms = getSearchTerms(id, className, text, tagName)
-        
-        // Setup visual styling target
-        if (className && typeof className === 'string') {
-          // Select classes
-          const classes = className.split(/\s+/).filter(c => c.trim().length > 1 && c !== 'hover' && c !== 'uni-selected-element')
-          
-          // Whitelist check: ONLY allow styling if element has a whitelisted styleable class
-          const styleableClass = classes.find(c => 
-            STYLEABLE_CLASSES.includes(c) || c.startsWith('custom-text-')
-          )
+        let sel = ''
+        let elementName = ''
 
-          if (styleableClass) {
-            const sel = `.${styleableClass}`
-            setSelectedSelector(sel)
-            setSelectedElementName(`${tagName.toUpperCase()}${sel}`)
-            
-            // Extract current CSS property values from XSLT code
-            setStyleMargin(getXsltStyleValue(xsltContent, sel, 'margin') || getXsltStyleValue(xsltContent, sel, 'margin-top') || '')
-            setStylePadding(getXsltStyleValue(xsltContent, sel, 'padding') || getXsltStyleValue(xsltContent, sel, 'padding-top') || '')
-            setStyleFontSize(getXsltStyleValue(xsltContent, sel, 'font-size') || '')
-            setStyleColor(getXsltStyleValue(xsltContent, sel, 'color') || '')
-            setStyleWidth(getXsltStyleValue(xsltContent, sel, 'width') || '')
-            setStyleTextAlign(getXsltStyleValue(xsltContent, sel, 'text-align') || '')
-            setStyleFontWeight(getXsltStyleValue(xsltContent, sel, 'font-weight') || '')
-            setStyleFontStyle(getXsltStyleValue(xsltContent, sel, 'font-style') || '')
-            setStyleTextDecoration(getXsltStyleValue(xsltContent, sel, 'text-decoration') || '')
-          } else {
-            // Clicked a core structural tag that is not whitelisted -> reject selection!
-            setSelectedSelector('')
-            setSelectedElementName('')
+        if (id) {
+          sel = `#${id}`
+          elementName = `${tagName.toUpperCase()}${sel}`
+        } else if (className && typeof className === 'string') {
+          const classes = className.split(/\s+/).filter(c => c.trim().length > 1 && c !== 'hover' && c !== 'uni-selected-element')
+          if (classes.length > 0) {
+            sel = `.${classes[0]}`
+            elementName = `${tagName.toUpperCase()}${sel}`
           }
+        }
+
+        if (!sel) {
+          sel = tagName.toLowerCase()
+          elementName = tagName.toUpperCase()
+        }
+
+        setSelectedSelector(sel)
+        setSelectedElementName(elementName)
+        setSelectedElementDetails({ targetTagName, targetSrc, targetHref, xsltId })
+        
+        // Extract current CSS property values from XSLT code (Prefer computed styles, fallback to XSLT style block)
+        if (styles) {
+          setStyleMargin(styles.margin || '')
+          setStylePadding(styles.padding || '')
+          setStyleFontSize(styles.fontSize ? styles.fontSize.replace('px', '') : '')
+          setStyleColor(rgbToHex(styles.color) || '#000000')
+          setStyleWidth(styles.width || '')
+          setStyleTextAlign(styles.textAlign || 'left')
+          setStyleFontWeight(styles.fontWeight || 'normal')
+          setStyleFontStyle(styles.fontStyle || 'normal')
+          setStyleTextDecoration(styles.textDecoration || 'none')
         } else {
-          setSelectedSelector('')
-          setSelectedElementName('')
+          setStyleMargin(getXsltStyleValue(xsltContent, sel, 'margin') || getXsltStyleValue(xsltContent, sel, 'margin-top') || '')
+          setStylePadding(getXsltStyleValue(xsltContent, sel, 'padding') || getXsltStyleValue(xsltContent, sel, 'padding-top') || '')
+          setStyleFontSize(getXsltStyleValue(xsltContent, sel, 'font-size') || '')
+          setStyleColor(getXsltStyleValue(xsltContent, sel, 'color') || '')
+          setStyleWidth(getXsltStyleValue(xsltContent, sel, 'width') || '')
+          setStyleTextAlign(getXsltStyleValue(xsltContent, sel, 'text-align') || '')
+          setStyleFontWeight(getXsltStyleValue(xsltContent, sel, 'font-weight') || '')
+          setStyleFontStyle(getXsltStyleValue(xsltContent, sel, 'font-style') || '')
+          setStyleTextDecoration(getXsltStyleValue(xsltContent, sel, 'text-decoration') || '')
         }
 
         // Scroll code editor to element line silently in the background (DO NOT SWITCH TAB!)
+        const searchTerms = getSearchTerms(id, className, text, tagName)
         if (searchTerms.length > 0) {
           const line = findLineInCode(xsltContent, searchTerms)
           if (line > 1 && xsltEditorRef.current) {
@@ -582,9 +717,36 @@ function App() {
     return () => window.removeEventListener('message', handleInspectorMessage)
   }, [xsltContent, designerActive, inspectorActive])
 
+  // Helper to convert rgb(r, g, b) colors to #hex format for HTML5 color input
+  const rgbToHex = (rgbString: string): string => {
+    if (!rgbString) return ''
+    if (rgbString.startsWith('#')) return rgbString
+    const match = rgbString.match(/^rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i)
+    if (match) {
+      const r = parseInt(match[1], 10)
+      const g = parseInt(match[2], 10)
+      const b = parseInt(match[3], 10)
+      return '#' + [r, g, b].map(x => {
+        const hex = x.toString(16)
+        return hex.length === 1 ? '0' + hex : hex
+      }).join('')
+    }
+    const matchRgba = rgbString.match(/^rgba\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)$/i)
+    if (matchRgba) {
+      const r = parseInt(matchRgba[1], 10)
+      const g = parseInt(matchRgba[2], 10)
+      const b = parseInt(matchRgba[3], 10)
+      return '#' + [r, g, b].map(x => {
+        const hex = x.toString(16)
+        return hex.length === 1 ? '0' + hex : hex
+      }).join('')
+    }
+    return rgbString
+  }
+
   // Handle WYSIWYG style edits from inputs
   const handleStyleChange = (property: string, value: string) => {
-    if (!selectedSelector) return
+    if (!selectedSelector && !selectedElementDetails?.xsltId) return
     
     // Local state sync
     if (property === 'margin') setStyleMargin(value)
@@ -597,8 +759,14 @@ function App() {
     else if (property === 'font-style') setStyleFontStyle(value)
     else if (property === 'text-decoration') setStyleTextDecoration(value)
     
-    // Write stylesheet changes back into Monaco editor
-    const updated = updateXsltStyle(xsltContent, selectedSelector, property, value)
+    // Write style changes back into Monaco editor (Prefer element ID inline style, fallback to style block)
+    let updated = xsltContent
+    if (selectedElementDetails?.xsltId) {
+      updated = updateElementStyleInXsltById(xsltContent, selectedElementDetails.xsltId, property, value)
+    } else if (selectedSelector) {
+      updated = updateXsltStyle(xsltContent, selectedSelector, property, value)
+    }
+
     if (updated !== xsltContent) {
       updateXsltContent(updated)
     }
@@ -670,13 +838,79 @@ function App() {
     }
   }
 
-  const handleRemoveElement = (selector: string) => {
+  const handleRemoveElement = (selector: string, details?: any) => {
     if (!selector) return
-    const updated = removeElementFromXslt(xsltContent, selector)
+    const updated = removeElementFromXslt(xsltContent, selector, details)
     if (updated !== xsltContent) {
       updateXsltContent(updated)
       setSelectedSelector('')
+      setSelectedElementDetails(null)
       setInspectorStatus("Seçilen eleman tasarımdan silindi.")
+      setTimeout(() => setInspectorStatus(null), 3000)
+    }
+  }
+
+  const handleSaveCurrentAsTemplate = async () => {
+    if (!saveTemplateName.trim()) {
+      alert('Lütfen şablon için geçerli bir isim girin.')
+      return
+    }
+    setIsSavingTemplate(true)
+    try {
+      const res = await fetch('/api/save-template', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: saveTemplateName.trim(),
+          content: xsltContent
+        })
+      })
+      if (res.ok) {
+        setInspectorStatus(`"${saveTemplateName}" şablonu başarıyla kaydedildi.`)
+        setTimeout(() => setInspectorStatus(null), 3000)
+        setSaveTemplateName('')
+        await loadCustomTemplates()
+      } else {
+        alert('Şablon kaydedilirken sunucu hatası oluştu.')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Şablon kaydedilemedi. Sunucu hatası.')
+    } finally {
+      setIsSavingTemplate(false)
+    }
+  }
+
+  const handleEditTextElement = () => {
+    const iframe = document.getElementById('xslt-preview-iframe') as HTMLIFrameElement
+    if (!iframe) return
+    const innerDoc = iframe.contentDocument || iframe.contentWindow?.document
+    if (!innerDoc) return
+
+    const selectedEl = innerDoc.querySelector('.uni-selected-element') as HTMLElement
+    if (selectedEl) {
+      const originalText = selectedEl.innerText || ''
+      selectedEl.setAttribute('data-original-text', originalText)
+      selectedEl.setAttribute('data-xslt-id-editable', selectedEl.getAttribute('data-xslt-id') || '')
+      
+      selectedEl.contentEditable = "true"
+      selectedEl.focus()
+      
+      // Select text contents to make it easy to overwrite
+      const range = innerDoc.createRange()
+      range.selectNodeContents(selectedEl)
+      const selection = iframe.contentWindow?.getSelection()
+      if (selection) {
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
+
+      setInspectorStatus("Metin düzenleniyor... Çıkmak için Enter'a basın veya dışarıya tıklayın.")
+      setTimeout(() => setInspectorStatus(null), 4000)
+    } else {
+      setInspectorStatus("Düzenlemek için lütfen önce faturadan bir metin alanı seçin.")
       setTimeout(() => setInspectorStatus(null), 3000)
     }
   }
@@ -807,6 +1041,222 @@ function App() {
     updateXmlContent(DEFAULT_XML)
     updateXsltContent(DEFAULT_XSLT)
     setErrorMsg(undefined)
+    setInvoiceLanguage('tr')
+  }
+
+  const translateInvoiceContent = (targetLang: 'tr' | 'en') => {
+    let content = xsltContent
+    let xml = xmlContent
+    
+    // Mapping of terms [Turkish, English]
+    const translationPairs: [string, string][] = [
+      ['e-Arşiv Fatura', 'e-Archive Invoice'],
+      ['e-FATURA', 'e-INVOICE'],
+      ['E-FATURA', 'INVOICE'],
+      ['E-Fatura Önizleme', 'E-Invoice Preview'],
+      ['Sade Fatura Tablosu', 'Simple Invoice Table'],
+      ['Yeni Şablon Tasarımı', 'New Template Design'],
+      ['Özelleştirme No:', 'Customization No:'],
+      ['Senaryo:', 'Scenario:'],
+      ['Fatura Tipi:', 'Invoice Type:'],
+      ['İlave Fatura Tipi:', 'Additional Invoice Type:'],
+      ['Fatura No:', 'Invoice No:'],
+      ['Fatura ID:', 'Invoice ID:'],
+      ['Fatura Tarihi:', 'Invoice Date:'],
+      ['Tarih:', 'Date:'],
+      ['Zaman:', 'Time:'],
+      ['Tür:', 'Type:'],
+      ['Düzenleme Tarihi:', 'Issue Date:'],
+      ['Düzenleme Zamanı:', 'Issue Time:'],
+      ['Fiili Sevk Tarihi:', 'Actual Delivery Date:'],
+      ['Son Ödeme Tarihi:', 'Payment Due Date:'],
+      ['Ödeme Yapacak Kurum', 'Paying Institution'],
+      ['Ödeme Şekli:', 'Payment Method:'],
+      ['Ödeme Şekli', 'Payment Method'],
+      ['Ödeme Tarihi:', 'Payment Date:'],
+      ['Ödeme Tarihi', 'Payment Date'],
+      ['Ödeme Notu:', 'Payment Note:'],
+      ['Ödeme Notu', 'Payment Note'],
+      ['Ödeme Koşulu:', 'Payment Term:'],
+      ['Ödeme Koşulu', 'Payment Term'],
+      ['Teslim/Bedel Ödeme Yeri', 'Delivery / Payment Location'],
+      ['Satıcı Bilgileri', 'Supplier Details'],
+      ['Alıcı Bilgileri', 'Customer Details'],
+      ['Sayın', 'Dear'],
+      ['SAYIN', 'DEAR'],
+      ['Vergi Dairesi/No:', 'Tax Office/No:'],
+      ['Vergi Dairesi:', 'Tax Office:'],
+      ['VKN:', 'Tax ID (VKN):'],
+      ['VKN/TCKN:', 'Tax ID / National ID:'],
+      ['TCKN:', 'National ID:'],
+      ['TCKN/VKN:', 'Tax / National ID:'],
+      ['E-posta:', 'Email:'],
+      ['E-Posta:', 'Email:'],
+      ['Web Sitesi:', 'Website:'],
+      ['Müşteri No:', 'Customer No:'],
+      ['İadeye Konu Olan Faturalar', 'Invoices Subject to Return'],
+      ['E-Fatura Bilgi Fişi', 'E-Invoice Info Sheet'],
+      ['İrsaliye Yerine Geçen E-Fatura Bilgi Fişi', 'E-Invoice Info Sheet Replacing Delivery Note'],
+      ['Faturalı Satış Bilgi Fişi', 'Invoiced Sales Info Sheet'],
+      ['Fatura Tahsilat Bilgi Fişi', 'Invoice Collection Info Sheet'],
+      ['Komisyonlu Fatura Tahsilat Bilgi Fişi', 'Commissioned Invoice Collection Info Sheet'],
+      ['Sıra No', 'Line No'],
+      ['Mal / Hizmet Açıklaması', 'Description of Goods / Services'],
+      ['Mal/Hizmet Açıklaması', 'Description of Goods / Services'],
+      ['Mal / Hizmet', 'Goods / Services'],
+      ['Mal/Hizmet', 'Goods/Services'],
+      ['Mal Hizmet Tutarı', 'Goods/Services Amount'],
+      ['Mal Hizmet Toplam Tutarı', 'Total Goods/Services Amount'],
+      ['Mal Hizmet', 'Goods/Services'],
+      ['Miktar', 'Quantity'],
+      ['Birim', 'Unit'],
+      ['Birim Fiyat', 'Unit Price'],
+      ['KDV Oranı (%)', 'VAT Rate (%)'],
+      ['KDV Oranı ( % )', 'VAT Rate ( % )'],
+      ['KDV Oranı', 'VAT Rate'],
+      ['KDV Tutarı', 'VAT Amount'],
+      ['Toplam Tutar', 'Total Amount'],
+      ['Tutar', 'Amount'],
+      ['Ara Toplam:', 'Subtotal:'],
+      ['Ara Toplam', 'Subtotal'],
+      ['Hesaplanan KDV', 'Calculated VAT'],
+      ['Hesaplanan', 'Calculated'],
+      ['KDV Toplamı:', 'Total VAT:'],
+      ['KDV Toplamı', 'Total VAT'],
+      ['Vergi Toplamı', 'Total Tax'],
+      ['Ödenecek Tutar:', 'Total Payable:'],
+      ['Ödenecek Tutar', 'Total Payable'],
+      ['Ödenecek Toplam Tutar:', 'Total Payable Amount:'],
+      ['Ödenecek Toplam Tutar', 'Total Payable Amount'],
+      ['ÖDENDİ', 'PAID'],
+      ['BASİT FATURA ÖNİZLEME', 'SIMPLE INVOICE PREVIEW'],
+      ['Satıcı Unvan:', 'Supplier Name:'],
+      ['Alıcı Unvan:', 'Customer Name:'],
+      ['İskonto', 'Discount'],
+      ['Toplam İskonto:', 'Total Discount:'],
+      ['Toplam İskonto', 'Total Discount'],
+      ['Vergiler Dahil Toplam Tutar:', 'Total Amount VAT Included:'],
+      ['Vergiler Dahil Toplam Tutar', 'Total Amount VAT Included'],
+      ['Vergiler Dahil Toplam Tutar(TL)', 'Total Amount VAT Included (TL)'],
+      ['Vergiler Dahil Reçete Toplam Tutarı', 'Total Prescription Amount VAT Included'],
+      ['Vergiler Hariç Reçete Toplam Tutarı', 'Total Prescription Amount VAT Excluded'],
+      ['KDV Hariç Ödenecek Tutar', 'Payable Amount Excl. VAT'],
+      ['Toplam Ödenecek Tutar', 'Total Payable Amount'],
+      ['Ödenecek Tutar(TL)', 'Payable Amount (TL)'],
+      ['KDV Dahil', 'VAT Included'],
+      ['KDV Hariç', 'VAT Excluded'],
+      ['Diğer Vergiler', 'Other Taxes'],
+      ['Mal Hizmet Toplam Tutarı:', 'Total Goods/Services Amount:'],
+      ['Mal Hizmet Toplam Tutarı', 'Total Goods/Amount'],
+      ['Yalnız', 'Only'],
+      ['YALNIZ', 'ONLY'],
+      ['KDV', 'VAT'],
+      ['Katma Değer Vergisi', 'Value Added Tax']
+    ]
+
+    // Safe word replacement checking boundary of Turkish and English alphanumeric chars
+    const replaceWordSafe = (text: string, search: string, replacement: string): string => {
+      const escaped = search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+      const trChars = 'a-zA-Z0-9çıüğşöİIĞÜŞÇÖ'
+      const regex = new RegExp(`(?<![${trChars}])${escaped}(?![${trChars}])`, 'g')
+      return text.replace(regex, replacement)
+    }
+
+    // Sort translation pairs by search word length in descending order
+    // to prevent shorter substrings from corrupting longer phrases
+    const sortedPairs = [...translationPairs].sort((a, b) => {
+      const searchA = targetLang === 'en' ? a[0] : a[1]
+      const searchB = targetLang === 'en' ? b[0] : b[1]
+      return searchB.length - searchA.length
+    })
+
+    // Translate XSLT: Split document into HTML tags and text nodes
+    const tokens = content.split(/(<[^>]+>)/g)
+    let inStyleBlock = false
+    
+    for (let i = 0; i < tokens.length; i++) {
+      if (i % 2 === 1) {
+        // It's a tag, check if it starts/ends a style block
+        const tag = tokens[i].toLowerCase()
+        if (tag.startsWith('<style')) {
+          inStyleBlock = true
+        } else if (tag.startsWith('</style')) {
+          inStyleBlock = false
+        }
+      } else {
+        // It's a text node. Translate only if it's not inside a style block
+        let text = tokens[i]
+        if (text && !inStyleBlock) {
+          if (targetLang === 'en') {
+            sortedPairs.forEach(([tr, en]) => {
+              text = replaceWordSafe(text, tr, en)
+            })
+          } else {
+            sortedPairs.forEach(([tr, en]) => {
+              text = replaceWordSafe(text, en, tr)
+            })
+          }
+          tokens[i] = text
+        }
+      }
+    }
+    content = tokens.join('')
+
+    // Translate XML as well so dynamic cbc:Name values (like KDV) get translated in standard ways
+    const xmlTokens = xml.split(/(<[^>]+>)/g)
+    for (let i = 0; i < xmlTokens.length; i++) {
+      if (i % 2 === 0) { // Text node
+        let text = xmlTokens[i]
+        if (text) {
+          if (targetLang === 'en') {
+            sortedPairs.forEach(([tr, en]) => {
+              text = replaceWordSafe(text, tr, en)
+            })
+          } else {
+            sortedPairs.forEach(([tr, en]) => {
+              text = replaceWordSafe(text, en, tr)
+            })
+          }
+          xmlTokens[i] = text
+        }
+      }
+    }
+    xml = xmlTokens.join('')
+
+    if (targetLang === 'en') {
+      if (watermarkText === 'ÖDENDİ') {
+        setWatermarkText('PAID')
+      }
+    } else {
+      if (watermarkText === 'PAID') {
+        setWatermarkText('ÖDENDİ')
+      }
+    }
+    
+    updateXsltContent(content)
+    updateXmlContent(xml)
+    setInvoiceLanguage(targetLang)
+  }
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newPercent = (moveEvent.clientX / window.innerWidth) * 100
+      setEditorWidthPercent(Math.max(25, Math.min(75, newPercent)))
+    }
+
+    const handleMouseUp = () => {
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
   }
 
   // Embedded XSLT Check
@@ -838,12 +1288,12 @@ function App() {
       {/* Drag & Drop Fullscreen Overlay */}
       {isDragging && (
         <div 
-          className="fixed inset-0 z-[100] bg-indigo-955/85 backdrop-blur-md border-4 border-dashed border-indigo-500 flex flex-col items-center justify-center gap-4 transition duration-200"
+          className="fixed inset-0 z-[100] bg-indigo-950/85 backdrop-blur-md border-4 border-dashed border-indigo-500 flex flex-col items-center justify-center gap-4 transition duration-200"
           onDragOver={handleDragOver}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
         >
-          <div className="p-8 bg-slate-900/90 rounded-2xl border border-slate-880 shadow-2xl flex flex-col items-center gap-4 max-w-md">
+          <div className="p-8 bg-slate-900/90 rounded-2xl border border-slate-800 shadow-2xl flex flex-col items-center gap-4 max-w-md">
             <div className="h-16 w-16 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 animate-bounce">
               <Upload className="h-8 w-8" />
             </div>
@@ -856,7 +1306,7 @@ function App() {
       )}
 
       {/* Header */}
-      <header className="border-b border-slate-900 bg-slate-955/80 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+      <header className="border-b border-slate-900 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-600/20">
             <Sparkles className="h-5 w-5 text-white animate-pulse" />
@@ -898,9 +1348,9 @@ function App() {
 
       {/* Embedded XSLT Warning Banner */}
       {showXsltBanner && (
-        <div className="bg-indigo-955/80 border-b border-indigo-500/30 px-6 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-indigo-200 backdrop-blur-sm">
+        <div className="bg-indigo-950/80 border-b border-indigo-500/30 px-6 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-indigo-200 backdrop-blur-sm">
           <div className="flex items-center gap-2.5">
-            <div className="h-7 w-7 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-505/40 shrink-0">
+            <div className="h-7 w-7 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/40 shrink-0">
               <Sparkles className="h-4 w-4 text-indigo-400" />
             </div>
             <div>
@@ -928,10 +1378,12 @@ function App() {
       {/* Main Workspace Area */}
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden h-[calc(100vh-73px)]">
         
-        {/* Left Side: Editors */}
-        <section className="w-full lg:w-1/2 flex flex-col border-r border-slate-900 bg-slate-950">
+        <section 
+          className="w-full lg:w-[var(--editor-width)] flex flex-col bg-slate-950 shrink-0 border-r border-slate-900"
+          style={{ '--editor-width': `${editorWidthPercent}%` } as React.CSSProperties}
+        >
           {/* Editors Tab Bar */}
-          <div className="flex items-center justify-between border-b border-slate-900 bg-slate-955 px-4 py-2 shrink-0">
+          <div className="flex items-center justify-between border-b border-slate-900 bg-slate-900 px-4 py-2 shrink-0">
             <div className="flex gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-900">
               <button
                 onClick={() => {
@@ -976,7 +1428,7 @@ function App() {
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition duration-150 cursor-pointer ${
                   editorActiveTab === 'designer'
                     ? 'bg-slate-800 text-white shadow-sm'
-                    : 'text-slate-455 hover:text-slate-200'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <LayoutGrid className="h-3.5 w-3.5 text-purple-400 animate-pulse" />
@@ -1024,7 +1476,7 @@ function App() {
           <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
             {editorActiveTab === 'designer' ? (
               // FIGMA DESIGN PROPERTIES DASHBOARD
-              <div className="flex-1 flex flex-col min-h-0 bg-slate-950 p-6 overflow-y-auto scrollbar-thin text-slate-350 select-none">
+              <div className="flex-1 flex flex-col min-h-0 bg-slate-950 p-6 overflow-y-auto scrollbar-thin text-slate-300 select-none">
                 
                 {/* Title & Description */}
                 <div className="border-b border-slate-900 pb-4 mb-6">
@@ -1054,10 +1506,10 @@ function App() {
                       />
                       <div>
                         <div className="text-xs font-semibold text-white">Birincil Tema Rengi</div>
-                        <div className="text-[10px] text-slate-505 mt-0.5">{themePrimaryColor}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">{themePrimaryColor}</div>
                       </div>
                     </div>
-                    <p className="text-[10px] text-slate-505 leading-normal">
+                    <p className="text-[10px] text-slate-500 leading-normal">
                       * Logo rengi, fatura çizgileri ve KDV başlıkları bu renkle otomatik güncellenir.
                     </p>
                   </div>
@@ -1085,7 +1537,7 @@ function App() {
                   {/* Card 3: Yeni Metin Ekleme */}
                   <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4 col-span-1 md:col-span-2">
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
-                      <Plus className="h-4 w-4 text-emerald-450" />
+                      <Plus className="h-4 w-4 text-emerald-400" />
                       Boş Alanlara Yeni Metin / Metin Kutusu Ekle
                     </h4>
                     <p className="text-[11px] text-slate-500 leading-normal">
@@ -1117,7 +1569,7 @@ function App() {
                   <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4 col-span-1 md:col-span-2">
                     <div className="flex items-center justify-between border-b border-slate-900 pb-2">
                       <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <RotateCw className="h-4 w-4 text-rose-450" />
+                        <RotateCw className="h-4 w-4 text-rose-400" />
                         Kaşe / Filigran Katmanı
                       </h4>
                       <label className="relative inline-flex items-center cursor-pointer">
@@ -1134,17 +1586,17 @@ function App() {
                     {watermarkVisible ? (
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-1">
-                          <span className="text-[11px] text-slate-455">Kaşe Metni:</span>
+                          <span className="text-[11px] text-slate-400">Kaşe Metni:</span>
                           <input 
                             type="text" 
                             value={watermarkText} 
                             onChange={(e) => handleWatermarkTextChange(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-850 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-rose-500"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-rose-500"
                           />
                         </div>
 
                         <div className="space-y-1">
-                          <div className="flex justify-between text-[11px] text-slate-455">
+                          <div className="flex justify-between text-[11px] text-slate-400">
                             <span>Kaşe Döndürme (Açı):</span>
                             <span className="font-mono text-white font-bold">{watermarkRotation}°</span>
                           </div>
@@ -1159,7 +1611,7 @@ function App() {
                         </div>
 
                         <div className="space-y-1">
-                          <span className="text-[11px] text-slate-455">Kaşe Rengi:</span>
+                          <span className="text-[11px] text-slate-400">Kaşe Rengi:</span>
                           <div className="flex items-center gap-2 mt-1">
                             <input 
                               type="color" 
@@ -1172,11 +1624,44 @@ function App() {
                         </div>
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-505 italic">Kaşe / Filigran katmanı devre dışı bırakılmıştır.</p>
+                      <p className="text-xs text-slate-500 italic">Kaşe / Filigran katmanı devre dışı bırakılmıştır.</p>
                     )}
                   </div>
 
-                  {/* Card 5: Seçilen Eleman Stilleri */}
+                  {/* Card 5: Fatura Dil Seçimi */}
+                  <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4 col-span-1 md:col-span-2">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
+                      <Languages className="h-4 w-4 text-indigo-400" />
+                      Fatura Dil Seçimi / Invoice Language
+                    </h4>
+                    <p className="text-[11px] text-slate-500 leading-normal">
+                      Faturadaki tüm başlık ve etiketleri (Satıcı/Alıcı Bilgileri, Ara Toplam, KDV, Ödenecek Tutar vb.) tek tıkla Türkçe veya İngilizce diline çevirebilirsiniz.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 max-w-sm">
+                      <button
+                        onClick={() => translateInvoiceContent('tr')}
+                        className={`py-2 px-4 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer border ${
+                          invoiceLanguage === 'tr'
+                            ? 'bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white shadow'
+                            : 'bg-slate-950 hover:bg-slate-900 border-slate-800 text-slate-300'
+                        }`}
+                      >
+                        <span>🇹🇷</span> Türkçe (TR)
+                      </button>
+                      <button
+                        onClick={() => translateInvoiceContent('en')}
+                        className={`py-2 px-4 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer border ${
+                          invoiceLanguage === 'en'
+                            ? 'bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white shadow'
+                            : 'bg-slate-950 hover:bg-slate-900 border-slate-800 text-slate-300'
+                        }`}
+                      >
+                        <span>🇬🇧</span> English (EN)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card 6: Seçilen Eleman Stilleri */}
                   <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4 col-span-1 md:col-span-2">
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
                       <Sliders className="h-4 w-4 text-purple-400" />
@@ -1218,11 +1703,11 @@ function App() {
                           {/* Font Modifier Buttons (Bold, Italic, Underline) */}
                           <div className="space-y-1">
                             <span className="text-[11px] text-slate-400 block mb-1">Yazı Tipi Biçimi (Metin):</span>
-                            <div className="flex gap-1.5 bg-slate-955 p-1 rounded-lg border border-slate-850 w-fit">
+                            <div className="flex gap-1.5 bg-slate-900 p-1 rounded-lg border border-slate-800 w-fit">
                               <button
                                 onClick={() => handleStyleChange('font-weight', styleFontWeight === 'bold' ? 'normal' : 'bold')}
                                 className={`px-3 py-1 rounded text-xs font-extrabold transition cursor-pointer ${
-                                  styleFontWeight === 'bold' ? 'bg-indigo-605 text-white shadow-sm' : 'text-slate-505 hover:text-slate-350'
+                                  styleFontWeight === 'bold' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
                                 }`}
                                 title="Yazıyı Kalın Yap"
                               >
@@ -1231,7 +1716,7 @@ function App() {
                               <button
                                 onClick={() => handleStyleChange('font-style', styleFontStyle === 'italic' ? 'normal' : 'italic')}
                                 className={`px-3 py-1 rounded text-xs italic transition cursor-pointer ${
-                                  styleFontStyle === 'italic' ? 'bg-indigo-605 text-white shadow-sm' : 'text-slate-505 hover:text-slate-350'
+                                  styleFontStyle === 'italic' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
                                 }`}
                                 title="Yazıyı İtalik Yap"
                               >
@@ -1240,7 +1725,7 @@ function App() {
                               <button
                                 onClick={() => handleStyleChange('text-decoration', styleTextDecoration === 'underline' ? 'none' : 'underline')}
                                 className={`px-3 py-1 rounded text-xs underline transition cursor-pointer ${
-                                  styleTextDecoration === 'underline' ? 'bg-indigo-605 text-white shadow-sm' : 'text-slate-505 hover:text-slate-305'
+                                  styleTextDecoration === 'underline' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
                                 }`}
                                 title="Yazının Altını Çiz"
                               >
@@ -1310,13 +1795,13 @@ function App() {
                               <span className="text-[10px] font-mono text-slate-500">{styleColor}</span>
                             </div>
 
-                            <div className="flex gap-1 bg-slate-955 p-1 rounded border border-slate-855">
+                            <div className="flex gap-1 bg-slate-900 p-1 rounded border border-slate-800">
                               {['left', 'center', 'right', 'justify'].map((align) => (
                                 <button
                                   key={align}
                                   onClick={() => handleStyleChange('text-align', align)}
                                   className={`px-3 py-1 rounded text-[9px] font-bold uppercase transition cursor-pointer ${
-                                    styleTextAlign === align ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-505 hover:text-slate-300'
+                                    styleTextAlign === align ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
                                   }`}
                                 >
                                   {align === 'left' ? 'Sol' : align === 'center' ? 'Ort' : align === 'right' ? 'Sağ' : 'Yas'}
@@ -1325,19 +1810,30 @@ function App() {
                             </div>
                           </div>
 
-                          {/* Actions: Add Inside or Remove Selected */}
-                          <div className="col-span-1 md:col-span-2 pt-4 border-t border-slate-900 flex gap-3">
-                            <button
-                              onClick={() => handleAddTextElement(selectedSelector.substring(1))}
-                              className="flex-1 py-2 px-3 bg-indigo-955 hover:bg-indigo-900 border border-indigo-900/60 hover:border-indigo-700 text-xs font-bold text-indigo-305 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
-                            >
-                              <Plus className="h-4 w-4" />
-                              İçine Metin Kutusu Ekle
-                            </button>
+                          {/* Actions: Add Inside, Edit Text or Remove Selected */}
+                          <div className="col-span-1 md:col-span-2 pt-4 border-t border-slate-900 flex flex-col gap-2.5">
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleAddTextElement(selectedSelector.substring(1))}
+                                className="flex-1 py-2 px-3 bg-indigo-950 hover:bg-indigo-900 border border-indigo-900/60 hover:border-indigo-700 text-xs font-bold text-indigo-300 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <Plus className="h-4 w-4" />
+                                İçine Ekle
+                              </button>
+
+                              <button
+                                onClick={handleEditTextElement}
+                                className="flex-1 py-2 px-3 bg-emerald-950 hover:bg-emerald-900 border border-emerald-900/60 hover:border-emerald-700 text-xs font-bold text-emerald-300 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                title="Seçili elemanın metin içeriğini düzenlemenizi sağlar."
+                              >
+                                <Edit3 className="h-4 w-4" />
+                                Metni Düzenle
+                              </button>
+                            </div>
                             
                             <button
-                              onClick={() => handleRemoveElement(selectedSelector)}
-                              className="py-2 px-4 bg-rose-955 hover:bg-rose-900 border border-rose-900/50 hover:border-rose-800 text-xs font-bold text-rose-300 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
+                              onClick={() => handleRemoveElement(selectedSelector, selectedElementDetails)}
+                              className="w-full py-2 px-4 bg-rose-950 hover:bg-rose-900 border border-rose-900/50 hover:border-rose-800 text-xs font-bold text-rose-300 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
                               title="Seçili elemanı fatura taslağından siler."
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1352,7 +1848,7 @@ function App() {
                         <div className="p-2.5 bg-indigo-500/10 rounded-lg text-indigo-400">
                           <Info className="h-5 w-5" />
                         </div>
-                        <p className="text-xs text-slate-550 leading-normal">
+                        <p className="text-xs text-slate-500 leading-normal">
                           Sağ taraftaki fatura önizleme belgesi üzerindeki **düzenlenebilir bir alana** (Logo unvanı, Adres kartları, Fatura başlığı, veya eklediğiniz özel metin kutuları) tıklayarak yazı boyutu, kalınlık, renk ve boşluk değerlerini düzenleyebilirsiniz.
                         </p>
                       </div>
@@ -1395,16 +1891,16 @@ function App() {
 
                 {/* Quick XSLT Jump Toolbar (only when XSLT tab is visible) */}
                 {editorActiveTab === 'xslt' && (
-                  <div className="bg-slate-955 border-b border-slate-900 px-4 py-1.5 flex items-center gap-1.5 text-[10px] text-slate-400 overflow-x-auto shrink-0 scrollbar-none">
+                  <div className="bg-slate-900 border-b border-slate-900 px-4 py-1.5 flex items-center gap-1.5 text-[10px] text-slate-400 overflow-x-auto shrink-0 scrollbar-none">
                     <span className="flex items-center gap-1 text-slate-500 font-medium shrink-0">
                       <Compass className="h-3 w-3" /> Hızlı Git:
                     </span>
-                    <button onClick={() => quickJumpTo('css')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-indigo-400 border border-slate-880 hover:border-indigo-500/20 transition cursor-pointer">🎨 CSS Stilleri</button>
-                    <button onClick={() => quickJumpTo('supplier')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-blue-400 border border-slate-880 hover:border-blue-500/20 transition cursor-pointer">🏢 Satıcı Bilgisi</button>
-                    <button onClick={() => quickJumpTo('customer')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-purple-400 border border-slate-880 hover:border-purple-500/20 transition cursor-pointer">👤 Alıcı Bilgisi</button>
-                    <button onClick={() => quickJumpTo('title')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-880 hover:border-cyan-500/20 transition cursor-pointer">📝 Fatura No</button>
-                    <button onClick={() => quickJumpTo('items')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-405 border border-slate-880 hover:border-amber-500/20 transition cursor-pointer">🛒 Ürün Tablosu</button>
-                    <button onClick={() => quickJumpTo('totals')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-emerald-450 border border-slate-880 hover:border-emerald-500/20 transition cursor-pointer">📊 Toplamlar</button>
+                    <button onClick={() => quickJumpTo('css')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-indigo-400 border border-slate-800 hover:border-indigo-500/20 transition cursor-pointer">🎨 CSS Stilleri</button>
+                    <button onClick={() => quickJumpTo('supplier')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-blue-400 border border-slate-800 hover:border-blue-500/20 transition cursor-pointer">🏢 Satıcı Bilgisi</button>
+                    <button onClick={() => quickJumpTo('customer')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-purple-400 border border-slate-800 hover:border-purple-500/20 transition cursor-pointer">👤 Alıcı Bilgisi</button>
+                    <button onClick={() => quickJumpTo('title')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-800 hover:border-cyan-500/20 transition cursor-pointer">📝 Fatura No</button>
+                    <button onClick={() => quickJumpTo('items')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-405 border border-slate-800 hover:border-amber-500/20 transition cursor-pointer">🛒 Ürün Tablosu</button>
+                    <button onClick={() => quickJumpTo('totals')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 hover:border-emerald-500/20 transition cursor-pointer">📊 Toplamlar</button>
                   </div>
                 )}
 
@@ -1472,16 +1968,16 @@ function App() {
                 {/* XML Editor Block */}
                 <div className="flex-1 min-h-[200px] flex flex-col border-b border-slate-900">
                   {/* XML Bar */}
-                  <div className="flex items-center justify-between px-4 py-1.5 bg-slate-955 border-b border-slate-900 text-xs text-slate-400 shrink-0">
+                  <div className="flex items-center justify-between px-4 py-1.5 bg-slate-900 border-b border-slate-900 text-xs text-slate-400 shrink-0">
                     <span className="flex items-center gap-1.5 font-semibold text-slate-300">
                       <FileCode className="h-3.5 w-3.5 text-blue-400" />
                       XML VERİSİ
                       {!validationStatus.xmlValid ? (
-                        <span className="flex items-center gap-1 text-[10px] text-rose-400 bg-rose-955/50 border border-rose-900 px-1.5 py-0.2 rounded">
+                        <span className="flex items-center gap-1 text-[10px] text-rose-400 bg-rose-950/50 border border-rose-900 px-1.5 py-0.2 rounded">
                           <AlertTriangle className="h-2.5 w-2.5" /> Geçersiz
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-955/50 border border-emerald-900 px-1.5 py-0.2 rounded">
+                        <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/50 border border-emerald-900 px-1.5 py-0.2 rounded">
                           <CheckCircle className="h-2.5 w-2.5" /> Geçerli
                         </span>
                       )}
@@ -1508,7 +2004,7 @@ function App() {
 
                   {/* XML Validation Overlay */}
                   {!validationStatus.xmlValid && (
-                    <div className="bg-rose-955/40 border-b border-rose-900 px-4 py-2 text-xs text-rose-300 flex items-start gap-2 shrink-0">
+                    <div className="bg-rose-950/40 border-b border-rose-900 px-4 py-2 text-xs text-rose-300 flex items-start gap-2 shrink-0">
                       <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
                       <div className="line-clamp-2" title={validationStatus.xmlError}>
                         <span className="font-semibold">XML Hatası:</span> {validationStatus.xmlError}
@@ -1539,16 +2035,16 @@ function App() {
                 {/* XSLT Editor Block */}
                 <div className="flex-1 min-h-[200px] flex flex-col">
                   {/* XSLT Bar */}
-                  <div className="flex items-center justify-between px-4 py-1.5 bg-slate-955 border-b border-slate-900 text-xs text-slate-400 shrink-0">
+                  <div className="flex items-center justify-between px-4 py-1.5 bg-slate-900 border-b border-slate-900 text-xs text-slate-400 shrink-0">
                     <span className="flex items-center gap-1.5 font-semibold text-slate-300">
                       <FileCode className="h-3.5 w-3.5 text-purple-400" />
                       XSLT TASARIMI
                       {!validationStatus.xsltValid ? (
-                        <span className="flex items-center gap-1 text-[10px] text-rose-400 bg-rose-955/50 border border-rose-900 px-1.5 py-0.2 rounded">
+                        <span className="flex items-center gap-1 text-[10px] text-rose-400 bg-rose-950/50 border border-rose-900 px-1.5 py-0.2 rounded">
                           <AlertTriangle className="h-2.5 w-2.5" /> Geçersiz
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1 text-[10px] text-emerald-455 bg-emerald-950/50 border border-emerald-900 px-1.5 py-0.2 rounded">
+                        <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/50 border border-emerald-900 px-1.5 py-0.2 rounded">
                           <CheckCircle className="h-2.5 w-2.5" /> Geçerli
                         </span>
                       )}
@@ -1576,12 +2072,12 @@ function App() {
                   {/* Quick navigation row for split layout */}
                   <div className="bg-slate-950 border-b border-slate-900 px-4 py-1 flex items-center gap-1.5 text-[9px] text-slate-400 overflow-x-auto shrink-0 scrollbar-none">
                     <span className="text-slate-500 font-medium shrink-0">Hızlı Git:</span>
-                    <button onClick={() => quickJumpTo('css')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-850 text-indigo-400 border border-slate-850 hover:border-indigo-500/20 transition cursor-pointer">🎨 CSS</button>
-                    <button onClick={() => quickJumpTo('supplier')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-855 text-blue-400 border border-slate-850 hover:border-blue-500/20 transition cursor-pointer">🏢 Satıcı</button>
-                    <button onClick={() => quickJumpTo('customer')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-855 text-purple-400 border border-slate-850 hover:border-purple-500/20 transition cursor-pointer">👤 Alıcı</button>
-                    <button onClick={() => quickJumpTo('title')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-855 text-cyan-400 border border-slate-850 hover:border-cyan-500/20 transition cursor-pointer">📝 Fatura No</button>
-                    <button onClick={() => quickJumpTo('items')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-855 text-amber-400 border border-slate-850 hover:border-amber-500/20 transition cursor-pointer">🛒 Ürünler</button>
-                    <button onClick={() => quickJumpTo('totals')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-855 text-emerald-400 border border-slate-850 hover:border-emerald-500/20 transition cursor-pointer">📊 Toplamlar</button>
+                    <button onClick={() => quickJumpTo('css')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-indigo-400 border border-slate-800 hover:border-indigo-500/20 transition cursor-pointer">🎨 CSS</button>
+                    <button onClick={() => quickJumpTo('supplier')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-blue-400 border border-slate-800 hover:border-blue-500/20 transition cursor-pointer">🏢 Satıcı</button>
+                    <button onClick={() => quickJumpTo('customer')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-purple-400 border border-slate-800 hover:border-purple-500/20 transition cursor-pointer">👤 Alıcı</button>
+                    <button onClick={() => quickJumpTo('title')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-800 hover:border-cyan-500/20 transition cursor-pointer">📝 Fatura No</button>
+                    <button onClick={() => quickJumpTo('items')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-amber-400 border border-slate-800 hover:border-amber-500/20 transition cursor-pointer">🛒 Ürünler</button>
+                    <button onClick={() => quickJumpTo('totals')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 hover:border-emerald-500/20 transition cursor-pointer">📊 Toplamlar</button>
                   </div>
 
                   {/* XSLT Validation Overlay */}
@@ -1618,11 +2114,20 @@ function App() {
           </div>
         </section>
 
+        {/* Resizer Divider */}
+        <div 
+          onMouseDown={handleMouseDown}
+          className="hidden lg:flex w-1 bg-slate-900 hover:bg-indigo-600 active:bg-indigo-600 cursor-col-resize transition-all relative z-40 select-none flex-col justify-center items-center group"
+          title="Paneli genişletmek için sürükleyin"
+        >
+          <div className="w-[2px] h-8 bg-slate-805 group-hover:bg-indigo-500 rounded" />
+        </div>
+
         {/* Right Side: Preview & Output */}
-        <section className="w-full lg:w-1/2 flex flex-col bg-slate-950">
+        <section className="flex-1 flex flex-col bg-slate-950 min-w-0">
           
           {/* Preview Tab Bar */}
-          <div className="flex items-center justify-between border-b border-slate-900 bg-slate-955 px-4 py-2 shrink-0">
+          <div className="flex items-center justify-between border-b border-slate-900 bg-slate-900 px-4 py-2 shrink-0">
             <div className="flex gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-900">
               <button
                 onClick={() => setPreviewActiveTab('preview')}
@@ -1672,7 +2177,7 @@ function App() {
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
                       inspectorActive 
                         ? 'bg-blue-600 hover:bg-blue-500 border-blue-500 text-white shadow shadow-blue-600/20' 
-                        : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-350 hover:text-white'
+                        : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
                     }`}
                     title="Faturadaki bir elemana tıklayarak koddaki satırını bulur."
                   >
@@ -1695,8 +2200,8 @@ function App() {
                     }}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
                       designerActive 
-                        ? 'bg-purple-650 hover:bg-purple-600 border-purple-600 text-white shadow shadow-purple-600/20' 
-                        : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-350 hover:text-white'
+                        ? 'bg-purple-600 hover:bg-purple-600 border-purple-600 text-white shadow shadow-purple-600/20' 
+                        : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
                     }`}
                     title="Sol panelde görsel tasarım arayüzünü (hizalama, genişlik, metin düzenleme) açar."
                   >
@@ -1706,19 +2211,31 @@ function App() {
                 </>
               )}
 
+
+
               {previewActiveTab === 'preview' && (
-                <div className="flex items-center gap-1 bg-slate-900/60 p-0.5 rounded-lg border border-slate-855">
+                <div className="flex items-center gap-1 bg-slate-900/60 p-0.5 rounded-lg border border-slate-800">
                   <button
-                    onClick={() => setPreviewLayout(previewLayout === 'A4' ? 'fit' : 'A4')}
-                    className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold transition duration-150 cursor-pointer ${
-                      previewLayout === 'A4' 
+                    onClick={() => translateInvoiceContent('tr')}
+                    className={`px-2 py-1.5 rounded-md text-[10px] font-bold transition duration-150 cursor-pointer flex items-center gap-1 ${
+                      invoiceLanguage === 'tr'
                         ? 'bg-indigo-600 text-white shadow'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
-                    title="A4 Baskı Düzeni Modunu Açar/Kapatır."
+                    title="Faturayı Türkçe diline çevirir."
                   >
-                    <FileText className="h-3 w-3" />
-                    A4 Sayfa
+                    🇹🇷 TR
+                  </button>
+                  <button
+                    onClick={() => translateInvoiceContent('en')}
+                    className={`px-2 py-1.5 rounded-md text-[10px] font-bold transition duration-150 cursor-pointer flex items-center gap-1 ${
+                      invoiceLanguage === 'en'
+                        ? 'bg-indigo-600 text-white shadow'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Faturayı İngilizce diline çevirir."
+                  >
+                    🇬🇧 EN
                   </button>
                 </div>
               )}
@@ -1777,27 +2294,58 @@ function App() {
                   <Info className="h-3.5 w-3.5 text-indigo-400 animate-pulse" />
                   Önizleme A4 baskı şablonuyla eş ölçeklidir.
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={() => {
+                        setZoomPercent(prev => Math.max(30, prev - 5))
+                        setIsAutoFit(false)
+                      }}
+                      className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                      title="Uzaklaştır"
+                    >
+                      <ZoomOut className="h-3.5 w-3.5" />
+                    </button>
+                    <input 
+                      type="range"
+                      min="30"
+                      max="150"
+                      value={zoomPercent}
+                      onChange={(e) => {
+                        setZoomPercent(parseInt(e.target.value))
+                        setIsAutoFit(false)
+                      }}
+                      className="w-24 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                      title="Yakınlaştırma Oranı"
+                    />
+                    <button 
+                      onClick={() => {
+                        setZoomPercent(prev => Math.min(150, prev + 5))
+                        setIsAutoFit(false)
+                      }}
+                      className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                      title="Yakınlaştır"
+                    >
+                      <ZoomIn className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  <span className="font-mono text-[10px] w-12 text-center select-none font-bold text-indigo-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-900">
+                    {zoomPercent}%
+                  </span>
+
                   <button 
-                    onClick={() => setZoomPercent(prev => Math.max(50, prev - 10))}
-                    className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
-                    title="Uzaklaştır"
+                    onClick={() => {
+                      setIsAutoFit(true)
+                    }}
+                    className={`px-2 py-1 rounded text-[10px] font-bold transition cursor-pointer ${
+                      isAutoFit 
+                        ? 'bg-indigo-600 text-white shadow-sm' 
+                        : 'bg-slate-800 hover:bg-slate-750 text-slate-300'
+                    }`}
+                    title="Sayfayı Ekran Genişliğine Sığdırır."
                   >
-                    <ZoomOut className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="font-mono text-[10px] w-8 text-center select-none">{zoomPercent}%</span>
-                  <button 
-                    onClick={() => setZoomPercent(prev => Math.min(150, prev + 10))}
-                    className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
-                    title="Yakınlaştır"
-                  >
-                    <ZoomIn className="h-3.5 w-3.5" />
-                  </button>
-                  <button 
-                    onClick={() => setZoomPercent(85)}
-                    className="ml-1 px-1.5 py-0.5 rounded bg-slate-850 hover:bg-slate-750 text-[10px] text-slate-300 transition cursor-pointer"
-                  >
-                    Sıfırla
+                    Genişliğe Sığdır
                   </button>
                 </div>
               </div>
@@ -1808,32 +2356,18 @@ function App() {
               
               {/* Preview Viewport Container (keeps the same iframe DOM node always to prevent reload blank bug) */}
               <div 
-                className={`flex-1 rounded-xl overflow-hidden shadow-2xl flex flex-col relative min-h-0 ${
-                  previewActiveTab === 'preview' && previewLayout === 'A4' 
-                    ? 'overflow-auto p-4 bg-slate-900/40 border border-slate-900 scrollbar-thin' 
-                    : 'bg-white border border-slate-900'
-                }`}
+                ref={previewContainerRef}
+                className="flex-1 rounded-xl overflow-hidden shadow-2xl flex flex-col relative min-h-0 bg-slate-900 border border-slate-900"
               >
                 
                 {previewActiveTab === 'preview' ? (
-                  <div 
-                    className={`transition-all duration-150 origin-top ${previewLayout === 'A4' ? 'mx-auto' : 'w-full h-full'}`} 
-                    style={{ 
-                      width: previewLayout === 'A4' ? '210mm' : '100%', 
-                      height: previewLayout === 'A4' ? '297mm' : '100%',
-                      transform: previewLayout === 'A4' ? `scale(${zoomPercent / 100})` : 'none',
-                      transformOrigin: 'top center',
-                      marginBottom: previewLayout === 'A4' ? `calc(297mm * (${zoomPercent / 100} - 1) + 24px)` : '0'
-                    }}
-                  >
-                    <iframe 
-                      ref={iframeRef}
-                      className={`w-full h-full border-none bg-white ${
-                        previewLayout === 'A4' ? 'shadow-2xl rounded-sm border border-slate-700/30' : ''
-                      }`}
-                      title="Fatura Canlı Önizleme"
-                    />
-                  </div>
+                  <iframe 
+                    ref={iframeRef}
+                    srcDoc={srcDocValue}
+                    onLoad={handleIframeLoad}
+                    className="w-full h-full border-none bg-slate-900"
+                    title="Fatura Canlı Önizleme"
+                  />
                 ) : null}
 
                 {previewActiveTab === 'html' && (
@@ -1856,7 +2390,7 @@ function App() {
                 )}
 
                 {previewActiveTab === 'logs' && (
-                  <div className="w-full h-full bg-slate-900 p-6 font-mono text-xs overflow-y-auto select-text scrollbar-thin text-slate-350">
+                  <div className="w-full h-full bg-slate-900 p-6 font-mono text-xs overflow-y-auto select-text scrollbar-thin text-slate-300">
                     
                     {/* Title */}
                     <div className="border-b border-slate-800 pb-4 mb-4">
@@ -1864,16 +2398,16 @@ function App() {
                         <Info className="h-4 w-4 text-indigo-400" />
                         Sistem Durum Raporu
                       </h3>
-                      <p className="text-[10px] text-slate-505 m-0 mt-1">Dönüştürücü durumu, gömülü dosyalar ve şablon seçimi</p>
+                      <p className="text-[10px] text-slate-500 m-0 mt-1">Dönüştürücü durumu, gömülü dosyalar ve şablon seçimi</p>
                     </div>
 
                     {/* Errors display if any */}
                     {errorMsg && (
-                      <div className="bg-rose-955/30 border border-rose-900 text-rose-300 rounded-lg p-4 mb-5 flex items-start gap-3">
-                        <AlertTriangle className="h-5 w-5 text-rose-450 shrink-0 mt-0.5" />
+                      <div className="bg-rose-950/30 border border-rose-900 text-rose-300 rounded-lg p-4 mb-5 flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
                         <div>
                           <div className="font-semibold text-rose-400 text-sm">Tasarım Dönüşüm Hatası</div>
-                          <pre className="mt-2 text-xs overflow-x-auto bg-rose-955/60 p-3 rounded border border-rose-900/60 whitespace-pre-wrap leading-relaxed text-rose-200">
+                          <pre className="mt-2 text-xs overflow-x-auto bg-rose-950/60 p-3 rounded border border-rose-900/60 whitespace-pre-wrap leading-relaxed text-rose-200">
                             {errorMsg}
                           </pre>
                         </div>
@@ -1882,7 +2416,7 @@ function App() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                       {/* File Status Cards */}
-                      <div className="bg-slate-950/50 border border-slate-850 rounded-lg p-4 space-y-2">
+                      <div className="bg-slate-950/50 border border-slate-800 rounded-lg p-4 space-y-2">
                         <div className="text-xs font-bold text-slate-400 border-b border-slate-800 pb-1.5 flex items-center gap-1.5">
                           <FileCode className="h-3.5 w-3.5 text-blue-400" />
                           XML Durumu
@@ -1899,7 +2433,7 @@ function App() {
                         </div>
                       </div>
 
-                      <div className="bg-slate-950/50 border border-slate-855 rounded-lg p-4 space-y-2">
+                      <div className="bg-slate-950/50 border border-slate-800 rounded-lg p-4 space-y-2">
                         <div className="text-xs font-bold text-slate-400 border-b border-slate-800 pb-1.5 flex items-center gap-1.5">
                           <FileCode className="h-3.5 w-3.5 text-purple-400" />
                           XSLT Durumu
@@ -1918,7 +2452,7 @@ function App() {
                     </div>
 
                     {/* Embedded Files Section */}
-                    <div className="bg-slate-950/50 border border-slate-855 rounded-lg p-4 mb-6">
+                    <div className="bg-slate-950/50 border border-slate-800 rounded-lg p-4 mb-6">
                       <div className="text-xs font-bold text-slate-400 border-b border-slate-800 pb-2 mb-3 flex items-center gap-1.5">
                         <FileCode className="h-3.5 w-3.5 text-indigo-400" />
                         Yüklenen XML'deki Gömülü Tasarımlar (Embedded Files)
@@ -1942,7 +2476,7 @@ function App() {
                             {embeddedXslt !== xsltContent && (
                               <button
                                 onClick={handleApplyEmbeddedXslt}
-                                className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-505 text-white text-[10px] font-bold transition cursor-pointer"
+                                className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold transition cursor-pointer"
                                 title="Gömülü XSLT şablonunu XSLT editörüne yazar ve aktif eder."
                               >
                                 Aktif Et
@@ -1950,14 +2484,14 @@ function App() {
                             )}
                             <button
                               onClick={() => handleDownload(embeddedXslt, 'gomulu-tasarim.xslt', 'text/xml')}
-                              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-850 text-slate-350 hover:text-white text-[10px] font-bold transition cursor-pointer"
+                              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-[10px] font-bold transition cursor-pointer"
                               title="XML içindeki gömülü XSLT şablonunu bağımsız bir dosya olarak indirir."
                             >
                               İndir
                             </button>
                             <button
                               onClick={handleRemoveEmbeddedXslt}
-                              className="px-2 py-1 rounded bg-rose-955 hover:bg-rose-900 text-rose-300 hover:text-white text-[10px] font-bold border border-rose-900/30 transition cursor-pointer"
+                              className="px-2 py-1 rounded bg-rose-950 hover:bg-rose-900 text-rose-300 hover:text-white text-[10px] font-bold border border-rose-900/30 transition cursor-pointer"
                               title="XML'deki gömülü XSLT kod bloğunu siler."
                             >
                               XML'den Kaldır
@@ -1965,14 +2499,14 @@ function App() {
                           </div>
                         </div>
                       ) : (
-                        <div className="text-xs text-slate-505 py-2 italic text-center">
+                        <div className="text-xs text-slate-500 py-2 italic text-center">
                           Bu XML dosyasının içerisinde gömülü herhangi bir XSLT tasarım dosyası tespit edilmedi.
                         </div>
                       )}
                     </div>
 
                     {/* Template Library Selection - "Yeni Şablon Ekle / Değiştir" */}
-                    <div className="bg-slate-950/50 border border-slate-805 rounded-lg p-4">
+                    <div className="bg-slate-950/50 border border-slate-800 rounded-lg p-4">
                       <div className="text-xs font-bold text-slate-400 border-b border-slate-800 pb-2 mb-3 flex items-center justify-between">
                         <span className="flex items-center gap-1.5">
                           <FilePlus2 className="h-3.5 w-3.5 text-emerald-400" />
@@ -1987,7 +2521,7 @@ function App() {
                           className={`p-3 rounded-lg border text-left space-y-1 transition duration-150 cursor-pointer ${
                             xsltContent === DEFAULT_XSLT 
                               ? 'bg-slate-900 border-indigo-500/50 text-indigo-200' 
-                              : 'bg-slate-955/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900/40 text-slate-350'
+                              : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900/40 text-slate-300'
                           }`}
                         >
                           <div className="text-xs font-bold flex items-center gap-1 text-white">
@@ -2005,14 +2539,14 @@ function App() {
                           className={`p-3 rounded-lg border text-left space-y-1 transition duration-150 cursor-pointer ${
                             xsltContent === SIMPLE_XSLT 
                               ? 'bg-slate-900 border-indigo-500/50 text-indigo-200' 
-                              : 'bg-slate-955/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900/40 text-slate-350'
+                              : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900/40 text-slate-300'
                           }`}
                         >
                           <div className="text-xs font-bold flex items-center gap-1 text-white">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
                             Sade Tablo Tasarımı
                           </div>
-                          <p className="text-[10px] text-slate-550 leading-normal">
+                          <p className="text-[10px] text-slate-500 leading-normal">
                             Metin odaklı, hızlı baskıya uygun sadeleştirilmiş fatura şablonu.
                           </p>
                         </button>
@@ -2023,18 +2557,88 @@ function App() {
                           className={`p-3 rounded-lg border text-left space-y-1 transition duration-150 cursor-pointer ${
                             xsltContent === EMPTY_XSLT 
                               ? 'bg-slate-900 border-indigo-500/50 text-indigo-200' 
-                              : 'bg-slate-955/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900/40 text-slate-350'
+                              : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900/40 text-slate-300'
                           }`}
                         >
                           <div className="text-xs font-bold flex items-center gap-1 text-white">
                             <Plus className="h-3 w-3 text-slate-400" />
                             Boş Şablon
                           </div>
-                          <p className="text-[10px] text-slate-550 leading-normal">
+                          <p className="text-[10px] text-slate-500 leading-normal">
                             Sıfırdan kendi XSLT tasarımınızı oluşturmak için boş bir XML iskeleti.
                           </p>
                         </button>
                       </div>
+
+                      {/* Save Current as Template Form */}
+                      <div className="mt-5 pt-4 border-t border-slate-900">
+                        <div className="text-[11px] font-bold text-slate-400 mb-2 flex items-center gap-1.5">
+                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>
+                          Mevcut Düzenlemeyi Şablon Olarak Kaydet
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Şablon İsmi (Örn: Logolu Mavi Tasarım)"
+                            value={saveTemplateName}
+                            onChange={(e) => setSaveTemplateName(e.target.value)}
+                            className="flex-1 bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition"
+                          />
+                          <button
+                            onClick={handleSaveCurrentAsTemplate}
+                            disabled={isSavingTemplate}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800/50 text-white font-bold text-xs rounded transition flex items-center gap-1 cursor-pointer shrink-0"
+                          >
+                            {isSavingTemplate ? 'Kaydediliyor...' : 'Şablonlara Kaydet'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Custom Templates List */}
+                      {customTemplates.length > 0 && (
+                        <div className="mt-5 pt-4 border-t border-slate-900">
+                          <div className="text-[11px] font-bold text-slate-400 mb-2.5 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                              Kaydedilmiş Özel Şablonlarınız ({customTemplates.length})
+                            </span>
+                            <button
+                              onClick={loadCustomTemplates}
+                              className="p-1 hover:bg-slate-800 rounded transition text-slate-500 hover:text-slate-300 cursor-pointer"
+                              title="Şablon listesini diskten yeniden tara ve güncelle"
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto scrollbar-thin pr-1">
+                            {customTemplates.map((t, idx) => (
+                              <div
+                                key={idx}
+                                className={`flex items-center justify-between p-2.5 rounded-lg border text-xs transition ${
+                                  xsltContent === t.content
+                                    ? 'bg-indigo-950/20 border-indigo-500/40 text-white'
+                                    : 'bg-slate-900 border-slate-800/80 text-slate-300 hover:border-slate-700'
+                                }`}
+                              >
+                                <div className="truncate pr-2">
+                                  <div className="font-semibold text-[11px] text-slate-200 truncate">{t.name}</div>
+                                  <div className="text-[9px] text-slate-500 font-mono truncate">{t.fileName}</div>
+                                </div>
+                                <button
+                                  onClick={() => updateXsltContent(t.content)}
+                                  className={`px-2 py-1 rounded text-[10px] font-bold transition shrink-0 cursor-pointer ${
+                                    xsltContent === t.content
+                                      ? 'bg-indigo-600 text-white'
+                                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'
+                                  }`}
+                                >
+                                  {xsltContent === t.content ? 'Yüklü' : 'Yükle'}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Transform Engine Details */}

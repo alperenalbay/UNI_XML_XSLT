@@ -37,7 +37,24 @@ export function transformXmlWithXslt(xmlString: string, xsltString: string): Tra
       };
     }
 
-    // 3. XSLT Dönüşüm İşlemi
+    // 3. XSLT Elemanlarına Geçici Benzersiz ID Enjeksiyonu (data-xslt-id)
+    let xsltIdCounter = 1;
+    const injectXsltIds = (node: Node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as Element;
+        if (el.namespaceURI !== 'http://www.w3.org/1999/XSL/Transform') {
+          el.setAttribute('data-xslt-id', String(xsltIdCounter++));
+        }
+      }
+      for (let i = 0; i < node.childNodes.length; i++) {
+        injectXsltIds(node.childNodes[i]);
+      }
+    };
+    if (xsltDoc.documentElement) {
+      injectXsltIds(xsltDoc.documentElement);
+    }
+
+    // 4. XSLT Dönüşüm İşlemi
     const xsltProcessor = new XSLTProcessor();
     try {
       xsltProcessor.importStylesheet(xsltDoc);
@@ -257,6 +274,189 @@ export function getXsltStyleValue(xsltCode: string, selector: string, property: 
 }
 
 /**
+ * XSLT içerisindeki belirli bir elemanın inline CSS stil özelliğini ID'sine göre günceller.
+ */
+export function updateElementStyleInXsltById(
+  xsltCode: string, 
+  xsltId: string, 
+  property: string, 
+  value: string
+): string {
+  if (!xsltCode.trim() || !xsltId || !property) return xsltCode;
+
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xsltCode, 'application/xml');
+    
+    if (doc.querySelector('parsererror')) {
+      console.warn('XSLT parser error when updating style by ID');
+      return xsltCode;
+    }
+
+    // Inject sequential IDs using the exact same deterministic algorithm
+    let xsltIdCounter = 1;
+    const injectXsltIds = (node: Node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as Element;
+        if (element.namespaceURI !== 'http://www.w3.org/1999/XSL/Transform') {
+          element.setAttribute('data-xslt-id', String(xsltIdCounter++));
+        }
+      }
+      for (let i = 0; i < node.childNodes.length; i++) {
+        injectXsltIds(node.childNodes[i]);
+      }
+    };
+    if (doc.documentElement) {
+      injectXsltIds(doc.documentElement);
+    }
+
+    // Find the element by data-xslt-id
+    const idToFind = String(xsltId);
+    const findElementByXsltId = (root: Node): Element | null => {
+      if (root.nodeType === Node.ELEMENT_NODE) {
+        const element = root as Element;
+        if (element.getAttribute('data-xslt-id') === idToFind) {
+          return element;
+        }
+      }
+      for (let i = 0; i < root.childNodes.length; i++) {
+        const found = findElementByXsltId(root.childNodes[i]);
+        if (found) return found;
+      }
+      return null;
+    };
+
+    const el = findElementByXsltId(doc.documentElement);
+    if (el) {
+      // Parse the inline style attribute
+      const currentStyle = el.getAttribute('style') || '';
+      
+      // Parse current CSS properties into a key-value map
+      const stylesMap: Record<string, string> = {};
+      currentStyle.split(';').forEach(pair => {
+        const parts = pair.split(':');
+        if (parts.length >= 2) {
+          const key = parts[0].trim().toLowerCase();
+          const val = parts.slice(1).join(':').trim();
+          if (key) {
+            stylesMap[key] = val;
+          }
+        }
+      });
+
+      // Update or add the property
+      if (value) {
+        stylesMap[property.toLowerCase()] = value;
+      } else {
+        delete stylesMap[property.toLowerCase()];
+      }
+
+      // Reconstruct the style attribute string
+      const styleString = Object.entries(stylesMap)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('; ');
+
+      if (styleString) {
+        el.setAttribute('style', styleString + ';');
+      } else {
+        el.removeAttribute('style');
+      }
+
+      // Clean up all temporary data-xslt-id attributes
+      const removeXsltIds = (node: Node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          (node as Element).removeAttribute('data-xslt-id');
+        }
+        for (let i = 0; i < node.childNodes.length; i++) {
+          removeXsltIds(node.childNodes[i]);
+        }
+      };
+      if (doc.documentElement) {
+        removeXsltIds(doc.documentElement);
+      }
+
+      return new XMLSerializer().serializeToString(doc);
+    }
+  } catch (err) {
+    console.error('Failed to update element style in XSLT by ID', err);
+  }
+  return xsltCode;
+}
+
+/**
+ * XSLT içerisindeki belirli bir elemanın metin içeriğini ID'sine göre günceller.
+ */
+export function updateElementTextInXsltById(xsltCode: string, xsltId: string, newText: string): string {
+  if (!xsltCode.trim() || !xsltId) return xsltCode;
+
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xsltCode, 'application/xml');
+    
+    if (doc.querySelector('parsererror')) {
+      console.warn('XSLT parser error when updating element text by ID');
+      return xsltCode;
+    }
+
+    // Inject sequential IDs using the exact same deterministic algorithm
+    let xsltIdCounter = 1;
+    const injectXsltIds = (node: Node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as Element;
+        if (element.namespaceURI !== 'http://www.w3.org/1999/XSL/Transform') {
+          element.setAttribute('data-xslt-id', String(xsltIdCounter++));
+        }
+      }
+      for (let i = 0; i < node.childNodes.length; i++) {
+        injectXsltIds(node.childNodes[i]);
+      }
+    };
+    if (doc.documentElement) {
+      injectXsltIds(doc.documentElement);
+    }
+
+    // Find the element by data-xslt-id
+    const idToFind = String(xsltId);
+    const findElementByXsltId = (root: Node): Element | null => {
+      if (root.nodeType === Node.ELEMENT_NODE) {
+        const element = root as Element;
+        if (element.getAttribute('data-xslt-id') === idToFind) {
+          return element;
+        }
+      }
+      for (let i = 0; i < root.childNodes.length; i++) {
+        const found = findElementByXsltId(root.childNodes[i]);
+        if (found) return found;
+      }
+      return null;
+    };
+
+    const el = findElementByXsltId(doc.documentElement);
+    if (el) {
+      el.textContent = newText;
+
+      // Clean up all temporary data-xslt-id attributes
+      const removeXsltIds = (node: Node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          (node as Element).removeAttribute('data-xslt-id');
+        }
+        for (let i = 0; i < node.childNodes.length; i++) {
+          removeXsltIds(node.childNodes[i]);
+        }
+      };
+      if (doc.documentElement) {
+        removeXsltIds(doc.documentElement);
+      }
+
+      return new XMLSerializer().serializeToString(doc);
+    }
+  } catch (err) {
+    console.error('Failed to update element text in XSLT by ID', err);
+  }
+  return xsltCode;
+}
+
+/**
  * XSLT kodundaki statik metinleri güvenli bir şekilde günceller.
  */
 export function updateXsltText(xsltCode: string, oldText: string, newText: string): string {
@@ -439,14 +639,12 @@ export function addElementToXslt(xsltCode: string, parentClassName: string, text
 }
 
 /**
- * XSLT içerisindeki bir elemanı sınıfına göre kaldırır ve stil kuralını temizler.
+ * XSLT içerisindeki bir elemanı sınıfına, ID'sine veya tag adına göre kaldırır ve stil kuralını temizler.
  */
-export function removeElementFromXslt(xsltCode: string, className: string): string {
-  if (!xsltCode.trim() || !className) return xsltCode;
+export function removeElementFromXslt(xsltCode: string, selector: string, details?: any): string {
+  if (!xsltCode.trim() || !selector) return xsltCode;
 
   try {
-    const cleanClass = className.startsWith('.') ? className.substring(1) : className;
-
     const parser = new DOMParser();
     const doc = parser.parseFromString(xsltCode, 'application/xml');
     
@@ -455,31 +653,151 @@ export function removeElementFromXslt(xsltCode: string, className: string): stri
       return xsltCode;
     }
 
-    const findElementByClass = (root: Node, clsName: string): Element | null => {
-      if (root.nodeType === Node.ELEMENT_NODE) {
-        const el = root as Element;
-        const cls = el.getAttribute('class') || '';
-        if (cls.split(/\s+/).includes(clsName)) {
-          return el;
-        }
-      }
-      for (let i = 0; i < root.childNodes.length; i++) {
-        const found = findElementByClass(root.childNodes[i], clsName);
-        if (found) return found;
-      }
-      return null;
-    };
+    let el: Element | null = null;
 
-    const el = findElementByClass(doc.documentElement, cleanClass);
+    // 1. Try to find by unique temporary XSLT ID if details is provided
+    if (details && details.xsltId) {
+      let xsltIdCounter = 1;
+      const injectXsltIds = (node: Node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const element = node as Element;
+          if (element.namespaceURI !== 'http://www.w3.org/1999/XSL/Transform') {
+            element.setAttribute('data-xslt-id', String(xsltIdCounter++));
+          }
+        }
+        for (let i = 0; i < node.childNodes.length; i++) {
+          injectXsltIds(node.childNodes[i]);
+        }
+      };
+      if (doc.documentElement) {
+        injectXsltIds(doc.documentElement);
+      }
+
+      const idToFind = String(details.xsltId);
+      const findElementByXsltId = (root: Node): Element | null => {
+        if (root.nodeType === Node.ELEMENT_NODE) {
+          const element = root as Element;
+          if (element.getAttribute('data-xslt-id') === idToFind) {
+            return element;
+          }
+        }
+        for (let i = 0; i < root.childNodes.length; i++) {
+          const found = findElementByXsltId(root.childNodes[i]);
+          if (found) return found;
+        }
+        return null;
+      };
+      el = findElementByXsltId(doc.documentElement);
+    }
+
+    // 2. If not found by XSLT ID, fallback to detailed base64 matching (for images)
+    if (!el && details && details.targetTagName) {
+      const targetTag = details.targetTagName.toLowerCase();
+      const targetSrc = details.targetSrc || '';
+      
+      const findExactElement = (root: Node): Element | null => {
+        if (root.nodeType === Node.ELEMENT_NODE) {
+          const element = root as Element;
+          if (element.tagName.toLowerCase() === targetTag) {
+            // If it's an image, match src (either exact, or if XSLT contains it as substring)
+            if (targetTag === 'img' && targetSrc) {
+              const elementSrc = element.getAttribute('src') || '';
+              const cleanTargetSrc = targetSrc.replace(/^data:image\/[a-zA-Z]+;base64,/, '').replace(/\s/g, '').substring(0, 50);
+              const cleanElementSrc = elementSrc.replace(/^data:image\/[a-zA-Z]+;base64,/, '').replace(/\s/g, '').substring(0, 50);
+              if (cleanElementSrc && cleanTargetSrc && cleanElementSrc.includes(cleanTargetSrc)) {
+                return element;
+              }
+            }
+          }
+        }
+        for (let i = 0; i < root.childNodes.length; i++) {
+          const found = findExactElement(root.childNodes[i]);
+          if (found) return found;
+        }
+        return null;
+      };
+      
+      el = findExactElement(doc.documentElement);
+    }
+
+    // 2. Fallback to selector matching if exact match not found
+    if (!el) {
+      if (selector.startsWith('#')) {
+      const idToFind = selector.substring(1);
+      const findElementById = (root: Node): Element | null => {
+        if (root.nodeType === Node.ELEMENT_NODE) {
+          const element = root as Element;
+          if (element.getAttribute('id') === idToFind) {
+            return element;
+          }
+        }
+        for (let i = 0; i < root.childNodes.length; i++) {
+          const found = findElementById(root.childNodes[i]);
+          if (found) return found;
+        }
+        return null;
+      };
+      el = findElementById(doc.documentElement);
+    } else if (selector.startsWith('.')) {
+      const classToFind = selector.substring(1);
+      const findElementByClass = (root: Node): Element | null => {
+        if (root.nodeType === Node.ELEMENT_NODE) {
+          const element = root as Element;
+          const cls = element.getAttribute('class') || '';
+          if (cls.split(/\s+/).includes(classToFind)) {
+            return element;
+          }
+        }
+        for (let i = 0; i < root.childNodes.length; i++) {
+          const found = findElementByClass(root.childNodes[i]);
+          if (found) return found;
+        }
+        return null;
+      };
+      el = findElementByClass(doc.documentElement);
+    } else {
+      const tagToFind = selector.toLowerCase();
+      const findElementByTag = (root: Node): Element | null => {
+        if (root.nodeType === Node.ELEMENT_NODE) {
+          const element = root as Element;
+          if (element.tagName.toLowerCase() === tagToFind) {
+            return element;
+          }
+        }
+        for (let i = 0; i < root.childNodes.length; i++) {
+          const found = findElementByTag(root.childNodes[i]);
+          if (found) return found;
+        }
+        return null;
+      };
+      el = findElementByTag(doc.documentElement);
+    }
+  }
+
     if (el && el.parentNode) {
       el.parentNode.removeChild(el);
       
+      // Clean up all temporary data-xslt-id attributes before serializing
+      const removeXsltIds = (node: Node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          (node as Element).removeAttribute('data-xslt-id');
+        }
+        for (let i = 0; i < node.childNodes.length; i++) {
+          removeXsltIds(node.childNodes[i]);
+        }
+      };
+      if (doc.documentElement) {
+        removeXsltIds(doc.documentElement);
+      }
+
       let serialized = new XMLSerializer().serializeToString(doc);
 
       // CSS stil kuralını temizle
-      const escapedClass = cleanClass.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      const cssRegex = new RegExp(`\\s*\\.${escapedClass}\\s*\\{[^}]*\\}`, 'i');
-      serialized = serialized.replace(cssRegex, '');
+      if (selector.startsWith('.') || selector.startsWith('#')) {
+        const escapedSelector = selector.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const cssRegex = new RegExp(`\\s*${escapedSelector}\\s*\\{[^}]*\\}`, 'i');
+        serialized = serialized.replace(cssRegex, '');
+      }
 
       return serialized;
     }

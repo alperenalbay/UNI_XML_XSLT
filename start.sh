@@ -8,20 +8,7 @@ echo "             UNI XML & XSLT CANLI EDITOR"
 echo "==================================================="
 echo ""
 
-# Port 5173 zaten dinleniyor mu kontrol et (Arka planda calisiyorsa)
-if lsof -Pi :5173 -sTCP:LISTEN -t >/dev/null 2>&1 || nc -z localhost 5173 >/dev/null 2>&1; then
-    echo "[BILGI] Canli sunucu zaten arka planda calisiyor."
-    echo "Tarayici sayfaniz aciliyor..."
-    echo ""
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        open "http://localhost:5173"
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        xdg-open "http://localhost:5173" 2>/dev/null
-    fi
-    exit 0
-fi
-
-# Node.js kontrolü
+# Node.js kontrolu
 if ! command -v node &> /dev/null
 then
     echo "HATA: Sisteminizde Node.js kurulu degil!"
@@ -31,16 +18,16 @@ then
     exit 1
 fi
 
-# node_modules kontrolü ve kurulumu
+# node_modules kontrolu ve kurulumu
 if [ ! -d "node_modules" ]; then
-    echo "[1/2] Bagimliliklar kuruluyor (npm install)... Bu islem birkac dakika surebilir..."
+    echo "[1/2] Bagimliliklar kuruluyor... Bu islem birkac dakika surebilir..."
     npm install
 else
     echo "[1/2] Bagimliliklar zaten kurulu."
 fi
 
 echo ""
-echo "[2/2] Canli editor baslatiliyor (npm run dev)..."
+echo "[2/2] Canli editor baslatiliyor..."
 echo "Tarayiciniz otomatik olarak acilacaktir..."
 echo ""
 

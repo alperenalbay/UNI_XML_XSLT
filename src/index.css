@@ -1,1 +1,72 @@
 @import "tailwindcss";
+
+/* Custom premium range slider styling for inputs */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Track styling */
+input[type="range"]::-webkit-slider-runnable-track {
+  background: #334155; /* slate-700 (high contrast against slate-950) */
+  height: 6px;
+  border-radius: 9999px;
+  border: 1px solid #475569; /* slate-600 border for crisp outline */
+}
+
+input[type="range"]::-moz-range-track {
+  background: #334155;
+  height: 6px;
+  border-radius: 9999px;
+  border: 1px solid #475569;
+}
+
+/* Thumb styling */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px; /* Centers thumb on the track */
+  background-color: #6366f1; /* indigo-500 */
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  border: 2px solid #ffffff; /* crisp white border */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.5);
+  transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.15);
+  background-color: #4f46e5; /* indigo-600 */
+}
+
+input[type="range"]::-moz-range-thumb {
+  background-color: #6366f1;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.5);
+  transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+input[type="range"]:hover::-moz-range-thumb {
+  transform: scale(1.15);
+  background-color: #4f46e5;
+}
+
+/* Specific styling for rose-accented sliders (like watermark stamp controls) */
+input[type="range"].accent-rose-500::-webkit-slider-thumb {
+  background-color: #f43f5e; /* rose-500 */
+}
+input[type="range"].accent-rose-500:hover::-webkit-slider-thumb {
+  background-color: #e11d48; /* rose-600 */
+}
+input[type="range"].accent-rose-500::-moz-range-thumb {
+  background-color: #f43f5e;
+}
+input[type="range"].accent-rose-500:hover::-moz-range-thumb {
+  background-color: #e11d48;
+}

@@ -1,38 +1,27 @@
 @echo off
-title UNI XML & XSLT Baslatici
+title UNI XML ^& XSLT Baslatici
+:: Calisma dizinini bat dosyasinin bulundugu klasor olarak ayarla (Cift tiklamada kritik!)
+cd /d "%~dp0"
+
 echo ===================================================
-echo             UNI XML & XSLT CANLI EDITOR
+echo             UNI XML ^& XSLT CANLI EDITOR
 echo ===================================================
 echo.
 
-:: Port 5173 zaten dinleniyor mu kontrol et (Arka planda calisiyorsa)
-netstat -an | findstr ":5173" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [BILGI] Canli sunucu zaten arka planda calisiyor.
-    echo Tarayici sayfaniz aciliyor...
-    echo.
-    start http://localhost:5173
-    timeout /t 2 >nul
-    exit
-)
-
-:: Node.js kontrolü
+:: Node.js kontrolu
 node -v >nul 2>&1
 if %errorlevel% neq 0 (
     echo HATA: Sisteminizde Node.js kurulu degil!
     echo Bu uygulamayi yerel olarak calistirmak icin Node.js gereklidir.
     echo Lutfen https://nodejs.org adresinden Node.js kurup tekrar deneyin.
     echo.
-    echo VEYA uygulamayi hic indirmeden dogrudan web tarayicinizdan
-    echo calistirmak icin online Vercel/GitHub Pages linkini kullanabilirsiniz.
-    echo.
     pause
     exit /b
 )
 
-:: node_modules kontrolü ve kurulumu
+:: node_modules kontrolu ve kurulumu
 if not exist node_modules (
-    echo [1/2] Bagimliliklar kuruluyor (npm install)... Bu islem ilk seferde 1-2 dakika surebilir...
+    echo [1/2] Bagimliliklar kuruluyor... Bu islem ilk seferde 1-2 dakika surebilir...
     echo Lutfen bu pencereyi kapatmayin...
     echo.
     call npm install
@@ -49,14 +38,14 @@ if not exist node_modules (
 )
 
 echo.
-echo [2/2] Canli sunucu baslatiliyor (npm run dev)...
+echo [2/2] Canli sunucu baslatiliyor...
 echo Tarayiciniz otomatik olarak acilacaktir...
 echo.
 
-:: Tarayıcıyı garanti şekilde aç
+:: Tarayiciyi ac
 start http://localhost:5173
 
-:: Vite sunucusunu başlat
+:: Vite sunucusunu baslat
 call npm run dev
 if %errorlevel% neq 0 (
     echo.
