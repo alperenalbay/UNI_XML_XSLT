@@ -1309,7 +1309,9 @@ function App() {
       <header className="border-b border-slate-900 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-600/20">
-            <Sparkles className="h-5 w-5 text-white animate-pulse" />
+            <svg className="h-5 w-5 text-white animate-pulse" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M15 12V28C15 33 19 37 24 37C29 37 33 33 33 28V12" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </div>
           <div>
             <h1 className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent m-0 py-0 flex items-center gap-2">
