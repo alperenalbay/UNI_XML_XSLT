@@ -1,9 +1,13 @@
 #!/bin/bash
-
-# Scriptin bulundugu dizine gec
 cd "$(dirname "$0")"
 
+echo "==================================================="
+echo "             UNI XML & XSLT CANLI EDITOR"
+echo "==================================================="
+echo ""
+
 # Sunucu zaten calisiyor mu kontrol et
+echo "ADIM 1: Port Kontrolu Yapiliyor..."
 ALREADY_RUNNING=0
 if command -v lsof &> /dev/null; then
     if lsof -i :5173 &> /dev/null; then
@@ -16,12 +20,9 @@ elif command -v nc &> /dev/null; then
 fi
 
 if [ $ALREADY_RUNNING -eq 1 ]; then
-    echo "==================================================="
-    echo "             UNI XML & XSLT CANLI EDITOR"
-    echo "==================================================="
     echo ""
-    echo "[OK] Uygulama zaten arka planda calisiyor!"
-    echo "Tarayiciniza yonlendiriliyorsunuz..."
+    echo "[BILGI] Uygulama zaten arka planda calisiyor!"
+    echo "[OK] Tarayiciniza yonlendiriliyorsunuz..."
     echo ""
     if [[ "$OSTYPE" == "darwin"* ]]; then
         open "http://localhost:5173"
@@ -31,25 +32,27 @@ if [ $ALREADY_RUNNING -eq 1 ]; then
     sleep 2
     exit 0
 fi
-
-echo "==================================================="
-echo "             UNI XML & XSLT CANLI EDITOR"
-echo "==================================================="
+echo "[OK] Port 5173 bos, yeni sunucu baslatilacak."
 echo ""
 
 # Node.js kontrolu
+echo "ADIM 2: Node.js Sistem Kontrolu Yapiliyor..."
 if ! command -v node &> /dev/null
 then
+    echo ""
     echo "HATA: Sisteminizde Node.js kurulu degil!"
     echo "Lutfen https://nodejs.org adresinden Node.js kurup tekrar deneyin."
     echo ""
     read -p "Cikis icin Enter tusuna basin..."
     exit 1
 fi
+echo "[OK] Node.js kurulu."
+echo ""
 
 # Git guncelleme kontrolu ve otomatik guncelleme
+echo "ADIM 3: Guncellemeler Denetleniyor (GitHub baglantisi)..."
+echo "(Baglanti durumuna gore 2-5 saniye surebilir, lutfen bekleyin...)"
 if command -v git &> /dev/null && [ -d ".git" ]; then
-    echo "[0/2] Uygulama guncellemeleri kontrol ediliyor..."
     git fetch origin main &> /dev/null
     LOCAL_HASH=$(git rev-parse HEAD)
     REMOTE_HASH=$(git rev-parse origin/main)
@@ -57,48 +60,54 @@ if command -v git &> /dev/null && [ -d ".git" ]; then
     if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
         echo ""
         echo "==================================================="
-        echo " YENI BIR SURUM MEVCUT! (Uzak sunucuda guncelleme var)"
+        echo " YENI SURUM BULUNDU! (Uzak sunucuda guncelleme var)"
         echo "==================================================="
         echo ""
         read -p "Yeni surumu otomatik yuklemek ister misiniz? (E/H): " update_choice
         if [[ "$update_choice" =~ ^[EeYy]$ ]]; then
             echo ""
-            echo "Kodlar guncelleniyor (git pull)..."
+            echo "[>] Kodlar guncelleniyor (git pull)..."
             git pull
             echo ""
-            echo "Bagimliliklar kontrol ediliyor (npm install)..."
+            echo "[>] Bagimliliklar kontrol ediliyor (npm install)..."
             npm install
-            echo "Guncelleme basariyla tamamlandi!"
+            echo "[OK] Guncelleme basariyla tamamlandi!"
             echo ""
         fi
     else
-        echo "[0/2] Uygulama en guncel surumde."
+        echo "[OK] Uygulama en guncel surumde."
     fi
+else
+    echo "[BILGI] Git kurulu olmadigi veya depo bulunamadigi icin guncelleme atlandi."
 fi
+echo ""
 
 # node_modules kontrolu ve kurulumu
+echo "ADIM 4: Paket Bagimliliklari Denetleniyor (node_modules)..."
 if [ ! -d "node_modules" ]; then
-    echo "[1/2] Bagimliliklar kuruluyor... Bu islem birkac dakika surebilir..."
+    echo ""
+    echo "[BILGI] Bagimliliklar eksik! Paketler kuruluyor..."
+    echo "(Bu islem 1-2 dakika alabilir, lutfen bekleyin...)"
     npm install
+    echo "[OK] Kurulum tamamlandi."
 else
-    echo "[1/2] Bagimliliklar zaten kurulu."
+    echo "[OK] Bagimliliklar zaten kurulu."
 fi
-
-echo ""
-echo "[2/2] Canli editor baslatiliyor..."
-echo "Tarayiciniz otomatik olarak acilacaktir..."
 echo ""
 
-# Isletim sistemine gore tarayiciyi otomatik ac
+# Sunucu baslatma
+echo "ADIM 5: Canli Sunucu Baslatiliyor (Vite)..."
+echo ""
+echo "==================================================="
+echo "  SUNUCU AKTIF EDILIYOR - PENCEREYI KAPATMAYIN!"
+echo "  Tarayiciniz otomatik olarak acilacaktir."
+echo "==================================================="
+echo ""
+
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
     open "http://localhost:5173"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    # Linux
-    xdg-open "http://localhost:5173" 2>/dev/null || echo "Lutfen tarayicinizdan http://localhost:5173 adresini acin."
-else
-    # Digerleri
-    echo "Lutfen tarayicinizdan http://localhost:5173 adresini acin."
+    xdg-open "http://localhost:5173" 2>/dev/null || true
 fi
 
 npm run dev
