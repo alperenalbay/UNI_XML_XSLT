@@ -129,7 +129,7 @@ const templateServerPlugin = () => ({
 export default defineConfig({
   plugins: [react(), tailwindcss(), templateServerPlugin()],
   server: {
-    open: true
+    open: false
   }
 })
 
