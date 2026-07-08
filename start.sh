@@ -3,6 +3,35 @@
 # Scriptin bulundugu dizine gec
 cd "$(dirname "$0")"
 
+# Sunucu zaten calisiyor mu kontrol et
+ALREADY_RUNNING=0
+if command -v lsof &> /dev/null; then
+    if lsof -i :5173 &> /dev/null; then
+        ALREADY_RUNNING=1
+    fi
+elif command -v nc &> /dev/null; then
+    if nc -z 127.0.0.1 5173 &> /dev/null; then
+        ALREADY_RUNNING=1
+    fi
+fi
+
+if [ $ALREADY_RUNNING -eq 1 ]; then
+    echo "==================================================="
+    echo "             UNI XML & XSLT CANLI EDITOR"
+    echo "==================================================="
+    echo ""
+    echo "[OK] Uygulama zaten arka planda calisiyor!"
+    echo "Tarayiciniza yonlendiriliyorsunuz..."
+    echo ""
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        open "http://localhost:5173"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        xdg-open "http://localhost:5173" 2>/dev/null || true
+    fi
+    sleep 2
+    exit 0
+fi
+
 echo "==================================================="
 echo "             UNI XML & XSLT CANLI EDITOR"
 echo "==================================================="

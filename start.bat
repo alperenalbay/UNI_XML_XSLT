@@ -3,6 +3,21 @@ title UNI XML ^& XSLT Baslatici
 :: Calisma dizinini bat dosyasinin bulundugu klasor olarak ayarla (Cift tiklamada kritik!)
 cd /d "%~dp0"
 
+:: Sunucu zaten calisiyor mu kontrol et (Port 5173 dinleniyor mu?)
+netstat -ano | findstr LISTENING | findstr :5173 >nul 2>&1
+if %errorlevel% equ 0 (
+    echo ===================================================
+    echo             UNI XML ^& XSLT CANLI EDITOR
+    echo ===================================================
+    echo.
+    echo [OK] Uygulama zaten arka planda calisiyor!
+    echo Tarayicinizda calisan adrese yonlendiriliyorsunuz...
+    echo.
+    start http://localhost:5173
+    timeout /t 2 >nul
+    exit /b
+)
+
 echo ===================================================
 echo             UNI XML ^& XSLT CANLI EDITOR
 echo ===================================================
