@@ -139,6 +139,54 @@ function App() {
     }
   }, [previewActiveTab])
 
+  // Auto updater states
+  const [updateAvailable, setUpdateAvailable] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [updateCheckStatus, setUpdateCheckStatus] = useState<string | null>(null)
+
+  const checkUpdates = async () => {
+    try {
+      const res = await fetch('/api/check-update')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.updateAvailable) {
+          setUpdateAvailable(true)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to check updates:', err)
+    }
+  }
+
+  const triggerUpdate = async () => {
+    setIsUpdating(true)
+    setUpdateCheckStatus('Uygulama güncelleniyor (git pull & npm install)... Lütfen bu sayfayı kapatmayın.')
+    try {
+      const res = await fetch('/api/trigger-update', { method: 'POST' })
+      if (res.ok) {
+        setUpdateCheckStatus('Güncelleme başarıyla tamamlandı! Sayfa 3 saniye içinde yenilenecek.')
+        setTimeout(() => {
+          window.location.reload()
+        }, 3000)
+      } else {
+        const data = await res.json()
+        alert(`Güncelleme başarısız oldu: ${data.error || 'Bilinmeyen hata'}`)
+        setUpdateCheckStatus(null)
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Güncelleme hatası oluştu.')
+      setUpdateCheckStatus(null)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  // Load custom templates and check updates on mount
+  useEffect(() => {
+    checkUpdates()
+  }, [])
+
   // Drag & Drop State
   const [isDragging, setIsDragging] = useState<boolean>(false)
 
@@ -1333,6 +1381,18 @@ function App() {
             Varsayılan Şablonu Yükle
           </button>
 
+          {updateAvailable && (
+            <button
+              onClick={triggerUpdate}
+              disabled={isUpdating}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white animate-pulse transition cursor-pointer animate-duration-1000"
+              title="Yeni güncellemeyi otomatik olarak indirir ve kurar."
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {isUpdating ? 'Güncelleniyor...' : 'Yeni Sürümü Yükle'}
+            </button>
+          )}
+
           <div className="h-4 w-px bg-slate-805" />
 
           {/* Auto transform status */}
@@ -2451,6 +2511,53 @@ function App() {
                           <span>{xsltContent.length.toLocaleString()} karakter</span>
                         </div>
                       </div>
+                    </div>
+
+                    {/* Update Station Section */}
+                    <div className="bg-slate-950/50 border border-slate-800 rounded-lg p-4 mb-6">
+                      <div className="text-xs font-bold text-slate-400 border-b border-slate-800 pb-2 mb-3 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <RefreshCw className="h-3.5 w-3.5 text-indigo-400 animate-spin" style={{ animationDuration: '3s' }} />
+                          Uygulama Güncelleme İstasyonu (Auto-Updater)
+                        </span>
+                        <button
+                          onClick={checkUpdates}
+                          disabled={isUpdating}
+                          className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer disabled:opacity-50"
+                        >
+                          Şimdi Denetle
+                        </button>
+                      </div>
+                      
+                      {updateCheckStatus && (
+                        <div className="text-xs text-amber-300 bg-amber-950/20 border border-amber-900/40 rounded p-2.5 mb-3 leading-relaxed">
+                          {updateCheckStatus}
+                        </div>
+                      )}
+
+                      {updateAvailable ? (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-emerald-950/20 border border-emerald-900/40 rounded-lg">
+                          <div className="space-y-0.5">
+                            <div className="text-xs font-bold text-emerald-400">
+                              Yeni Bir Güncelleme Mevcut!
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              GitHub üzerinde yeni geliştirmeler tespit edildi. Tek tıkla otomatik olarak güncelleyebilirsiniz.
+                            </div>
+                          </div>
+                          <button
+                            onClick={triggerUpdate}
+                            disabled={isUpdating}
+                            className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer shrink-0"
+                          >
+                            {isUpdating ? 'Güncelleniyor...' : 'Şimdi Güncelle'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500 py-1.5 italic text-center">
+                          Uygulamanız en güncel sürümde çalışıyor. Herhangi bir yeni güncelleme bulunmuyor.
+                        </div>
+                      )}
                     </div>
 
                     {/* Embedded Files Section */}

@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { execSync } from 'child_process'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -13,6 +14,53 @@ const templateServerPlugin = () => ({
   name: 'template-server',
   configureServer(server: any) {
     server.middlewares.use((req: any, res: any, next: any) => {
+      if (req.url === '/api/check-update' && req.method === 'GET') {
+        try {
+          if (!fs.existsSync(path.join(__dirname, '.git'))) {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ updateAvailable: false, reason: 'not_git_repo' }));
+            return;
+          }
+          
+          execSync('git fetch origin main', { stdio: 'ignore' });
+          const localHash = execSync('git rev-parse HEAD').toString().trim();
+          const remoteHash = execSync('git rev-parse origin/main').toString().trim();
+          
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({
+            updateAvailable: localHash !== remoteHash,
+            localHash,
+            remoteHash
+          }));
+        } catch (err: any) {
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ updateAvailable: false, reason: 'error', error: err.message }));
+        }
+        return;
+      }
+      
+      if (req.url === '/api/trigger-update' && req.method === 'POST') {
+        try {
+          execSync('git pull', { stdio: 'inherit' });
+          try {
+            execSync('npm install', { stdio: 'inherit' });
+          } catch (npmErr) {
+            console.warn('npm install failed but git pull succeeded', npmErr);
+          }
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: true }));
+        } catch (err: any) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+        return;
+      }
+
       if (req.url === '/api/save-template' && req.method === 'POST') {
         let body = '';
         req.on('data', (chunk: any) => { body += chunk; });

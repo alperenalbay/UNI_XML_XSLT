@@ -18,6 +18,35 @@ then
     exit 1
 fi
 
+# Git guncelleme kontrolu ve otomatik guncelleme
+if command -v git &> /dev/null && [ -d ".git" ]; then
+    echo "[0/2] Uygulama guncellemeleri kontrol ediliyor..."
+    git fetch origin main &> /dev/null
+    LOCAL_HASH=$(git rev-parse HEAD)
+    REMOTE_HASH=$(git rev-parse origin/main)
+    
+    if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
+        echo ""
+        echo "==================================================="
+        echo " YENI BIR SURUM MEVCUT! (Uzak sunucuda guncelleme var)"
+        echo "==================================================="
+        echo ""
+        read -p "Yeni surumu otomatik yuklemek ister misiniz? (E/H): " update_choice
+        if [[ "$update_choice" =~ ^[EeYy]$ ]]; then
+            echo ""
+            echo "Kodlar guncelleniyor (git pull)..."
+            git pull
+            echo ""
+            echo "Bagimliliklar kontrol ediliyor (npm install)..."
+            npm install
+            echo "Guncelleme basariyla tamamlandi!"
+            echo ""
+        fi
+    else
+        echo "[0/2] Uygulama en guncel surumde."
+    fi
+fi
+
 # node_modules kontrolu ve kurulumu
 if [ ! -d "node_modules" ]; then
     echo "[1/2] Bagimliliklar kuruluyor... Bu islem birkac dakika surebilir..."
