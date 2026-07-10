@@ -49,8 +49,8 @@ import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/in
 
 function App() {
   // XML & XSLT State
-  const [xmlContent, setXmlContent] = useState<string>(DEFAULT_XML)
-  const [xsltContent, setXsltContent] = useState<string>(DEFAULT_XSLT)
+  const [xmlContent, setXmlContent] = useState<string>('')
+  const [xsltContent, setXsltContent] = useState<string>('')
   
   // Transform Output State
   const [htmlOutput, setHtmlOutput] = useState<string>('')
@@ -309,20 +309,20 @@ function App() {
         xmlError = err.textContent || 'Geçersiz XML Formatı'
       }
     } else {
-      xmlValid = false
-      xmlError = 'XML içeriği boş'
+      // Clean empty state is considered valid
+      xmlValid = true
     }
 
     if (xsltContent.trim()) {
       const xsltDoc = parser.parseFromString(xsltContent, 'application/xml')
       const err = xsltDoc.querySelector('parsererror')
       if (err) {
-        xmlValid = false
+        xsltValid = false
         xsltError = err.textContent || 'Geçersiz XSLT Formatı'
       }
     } else {
-      xsltValid = false
-      xsltError = 'XSLT içeriği boş'
+      // Clean empty state is considered valid
+      xsltValid = true
     }
 
     setValidationStatus({ xmlValid, xsltValid, xmlError, xsltError })
@@ -330,6 +330,11 @@ function App() {
 
   // Perform Transform
   const runTransformation = () => {
+    if (!xmlContent.trim() || !xsltContent.trim()) {
+      setHtmlOutput('')
+      setErrorMsg(undefined)
+      return
+    }
     const result = transformXmlWithXslt(xmlContent, xsltContent)
     if (result.error) {
       setErrorMsg(result.error)
@@ -1325,6 +1330,327 @@ function App() {
     setHasDismissedXslt(true)
   }
 
+  if (!xmlContent.trim() && !xsltContent.trim()) {
+    return (
+      <div 
+        className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white"
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {/* Drag & Drop Fullscreen Overlay */}
+        {isDragging && (
+          <div 
+            className="fixed inset-0 z-[100] bg-indigo-950/85 backdrop-blur-md border-4 border-dashed border-indigo-500 flex flex-col items-center justify-center gap-4 transition duration-205"
+            onDragOver={handleDragOver}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+          >
+            <div className="p-8 bg-slate-900/90 rounded-2xl border border-slate-800 shadow-2xl flex flex-col items-center gap-4 max-w-md">
+              <div className="h-16 w-16 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 animate-bounce">
+                <Upload className="h-8 w-8" />
+              </div>
+              <h3 className="text-xl font-bold text-white">Dosyaları Buraya Bırakın</h3>
+              <p className="text-xs text-slate-400 text-center leading-relaxed">
+                XML (Fatura) veya XSLT (Tasarım) dosyanızı sürükleyip bırakarak editörde anında açabilirsiniz.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Header */}
+        <header className="border-b border-slate-900 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-600/20">
+              <svg className="h-5 w-5 text-white animate-pulse" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M15 12V28C15 33 19 37 24 37C29 37 33 33 33 28V12" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent m-0 py-0 flex items-center gap-2">
+                UNI XML&amp;XSLT
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-indigo-400">Canlı Editör</span>
+              </h1>
+              <p className="text-xs text-slate-500 m-0">E-Fatura &amp; E-Arşiv XML / XSLT Canlı Tasarım &amp; Test İstasyonu</p>
+            </div>
+          </div>
+
+          {/* Global Toolbar */}
+          <div className="flex items-center gap-3">
+            {/* Template Selection Dropdown */}
+            <div className="flex items-center gap-1.5">
+              <select
+                value=""
+                onChange={(e) => {
+                  const val = e.target.value
+                  if (val === 'default') {
+                    loadDefaultSample()
+                  } else if (val === 'simple') {
+                    updateXmlContent(DEFAULT_XML)
+                    updateXsltContent(SIMPLE_XSLT)
+                  } else if (val === 'empty') {
+                    updateXmlContent(DEFAULT_XML)
+                    updateXsltContent(EMPTY_XSLT)
+                  } else if (val.startsWith('custom-')) {
+                    const idx = parseInt(val.replace('custom-', ''))
+                    const t = customTemplates[idx]
+                    if (t) {
+                      updateXmlContent(DEFAULT_XML)
+                      updateXsltContent(t.content)
+                    }
+                  }
+                }}
+                className="bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-indigo-400 hover:text-indigo-300 focus:outline-none cursor-pointer font-semibold transition"
+              >
+                <option value="" disabled>Şablon Kütüphanesi</option>
+                <option value="default">Varsayılan Şablon (UBL-TR)</option>
+                <option value="simple">Sade Tablo Tasarımı</option>
+                <option value="empty">Boş Şablon</option>
+                {customTemplates.length > 0 && (
+                  <optgroup label="Kaydedilmiş Şablonlarınız" className="bg-slate-950 text-slate-300">
+                    {customTemplates.map((t, idx) => (
+                      <option key={idx} value={`custom-${idx}`}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+
+            <button
+              onClick={loadDefaultSample}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 hover:border-indigo-500/30 transition duration-150 text-indigo-400 hover:text-indigo-300 cursor-pointer"
+              title="Sistemdeki varsayılan e-fatura verilerini ve şablonunu yükler."
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Şablonum Yok (Varsayılanı Yükle)
+            </button>
+
+            {updateAvailable && (
+              <button
+                onClick={triggerUpdate}
+                disabled={isUpdating}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white animate-pulse transition cursor-pointer animate-duration-1000"
+                title="Yeni güncellemeyi otomatik olarak indirir ve kurar."
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {isUpdating ? 'Güncelleniyor...' : 'Yeni Sürümü Yükle'}
+              </button>
+            )}
+
+            <div className="h-4 w-px bg-slate-805" />
+
+            <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-900 px-3 py-1.5 rounded-lg">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-amber-400"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+              </span>
+              <span className="text-xs font-semibold text-slate-400">
+                Dosya Bekleniyor
+              </span>
+            </div>
+          </div>
+        </header>
+
+        {/* Dashboard Landing Body */}
+        <main className="flex-1 overflow-y-auto bg-slate-950 flex flex-col items-center justify-center p-6 lg:p-12 relative min-h-0 select-none">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
+          
+          <div className="max-w-4xl w-full z-10 flex flex-col items-center">
+            {/* Logo / Badge */}
+            <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-600/30 mb-6 scale-105">
+              <svg className="h-8 w-8 text-white animate-pulse" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M15 12V28C15 33 19 37 24 37C29 37 33 33 33 28V12" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+
+            {/* Title & Subtitle */}
+            <h2 className="text-3xl font-extrabold text-white tracking-tight text-center bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
+              UNI XML & XSLT Canlı Tasarım İstasyonu
+            </h2>
+            <p className="text-slate-400 text-sm mt-3 text-center max-w-xl leading-relaxed">
+              E-Fatura (UBL-TR) XML verilerinizi ve XSLT tasarım şablonlarınızı canlı olarak izleyin, düzenleyin ve görsel olarak tasarlayın.
+            </p>
+
+            {/* Main Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full mt-10">
+              
+              {/* Left Card: Upload Files */}
+              <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 flex flex-col justify-between hover:border-indigo-500/30 transition-all duration-200 backdrop-blur-sm group">
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="h-10 w-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform duration-200">
+                      <Upload className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Kendi Dosyalarınızı Yükleyin</h3>
+                      <p className="text-[11px] text-slate-500">XML ve XSLT dosyalarınızı bilgisayarınızdan seçin.</p>
+                    </div>
+                  </div>
+                  
+                  <p className="text-xs text-slate-400 leading-relaxed mb-6">
+                    Mevcut XML fatura verilerinizi veya XSLT şablonlarınızı yükleyerek hemen çalışmaya başlayın. Dosyaları ekranın herhangi bir yerine sürükleyip bırakarak da yükleyebilirsiniz.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-slate-850 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition text-center justify-center">
+                      <FileCode className="h-4 w-4 text-blue-400 shrink-0" />
+                      XML Yükle
+                      <input
+                        type="file"
+                        accept=".xml"
+                        onChange={(e) => handleFileUploadWrapper(e, 'xml')}
+                        className="hidden"
+                      />
+                    </label>
+                    <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-slate-850 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition text-center justify-center">
+                      <FileCode className="h-4 w-4 text-purple-400 shrink-0" />
+                      XSLT Yükle
+                      <input
+                        type="file"
+                        accept=".xslt,.xsl"
+                        onChange={(e) => handleFileUploadWrapper(e, 'xslt')}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Card: Templates & Samples */}
+              <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 flex flex-col justify-between hover:border-indigo-500/30 transition-all duration-200 backdrop-blur-sm group">
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="h-10 w-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform duration-200">
+                      <Sparkles className="h-5 w-5 text-indigo-400 animate-pulse" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white font-sans">Şablonum Yok</h3>
+                      <p className="text-[11px] text-slate-500">Sistemdeki hazır veya kayıtlı tasarımları kullanın.</p>
+                    </div>
+                  </div>
+                  
+                  <p className="text-xs text-slate-400 leading-relaxed mb-6">
+                    Eğer elinizde bir e-fatura verisi veya tasarım şablonu yoksa, örnek fatura verisi ile standart şablonu yükleyerek hemen canlı önizlemeyi test edebilirsiniz.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <button
+                    onClick={loadDefaultSample}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/25 transition cursor-pointer"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Şablonum Yok (Varsayılanı Yükle)
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Template Picker Container */}
+            <div className="w-full mt-8 bg-slate-900/20 border border-slate-900 rounded-xl p-5 backdrop-blur-sm">
+              <div className="text-xs font-bold text-slate-400 mb-3 flex items-center gap-2">
+                <FilePlus2 className="h-4 w-4 text-emerald-400 animate-pulse" />
+                Hazır veya Kaydedilmiş Şablonlardan Biriyle Başlayın:
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  onClick={() => {
+                    updateXmlContent(DEFAULT_XML)
+                    updateXsltContent(DEFAULT_XSLT)
+                  }}
+                  className="p-3 rounded-lg border border-slate-800 bg-slate-900/40 hover:border-slate-700 hover:bg-slate-900/80 text-left space-y-1 transition duration-150 cursor-pointer"
+                >
+                  <div className="text-xs font-bold flex items-center gap-1 text-white">
+                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>
+                    Standart e-Fatura
+                  </div>
+                  <p className="text-[9px] text-slate-500 leading-normal">
+                    Detaylı logolu ve tablolu kurumsal UBL-TR fatura tasarımı şablonu.
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => {
+                    updateXmlContent(DEFAULT_XML)
+                    updateXsltContent(SIMPLE_XSLT)
+                  }}
+                  className="p-3 rounded-lg border border-slate-800 bg-slate-900/40 hover:border-slate-700 hover:bg-slate-900/80 text-left space-y-1 transition duration-150 cursor-pointer"
+                >
+                  <div className="text-xs font-bold flex items-center gap-1 text-white">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                    Sade Tablo Tasarımı
+                  </div>
+                  <p className="text-[9px] text-slate-500 leading-normal">
+                    Metin odaklı, hızlı baskıya uygun sadeleştirilmiş fatura şablonu.
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => {
+                    updateXmlContent(DEFAULT_XML)
+                    updateXsltContent(EMPTY_XSLT)
+                  }}
+                  className="p-3 rounded-lg border border-slate-800 bg-slate-900/40 hover:border-slate-700 hover:bg-slate-900/80 text-left space-y-1 transition duration-150 cursor-pointer"
+                >
+                  <div className="text-xs font-bold flex items-center gap-1 text-white">
+                    <Plus className="h-3 w-3 text-slate-400" />
+                    Boş Şablon
+                  </div>
+                  <p className="text-[9px] text-slate-500 leading-normal">
+                    Sıfırdan kendi XSLT tasarımınızı oluşturmak için boş bir XML iskeleti.
+                  </p>
+                </button>
+              </div>
+
+              {customTemplates.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-slate-900">
+                  <div className="text-[11px] font-bold text-slate-400 mb-2">
+                    Kaydedilmiş Özel Şablonlarınız ({customTemplates.length}):
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {customTemplates.map((t, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          updateXmlContent(DEFAULT_XML)
+                          updateXsltContent(t.content)
+                        }}
+                        className="flex items-center justify-between p-2.5 rounded-lg border border-slate-850 bg-slate-900/30 hover:border-slate-700 hover:bg-slate-900/60 text-left transition duration-150 cursor-pointer text-xs"
+                      >
+                        <div className="truncate pr-2">
+                          <div className="font-semibold text-[10px] text-slate-200 truncate">{t.name}</div>
+                        </div>
+                        <span className="text-[9px] text-indigo-400 font-bold hover:underline shrink-0">Yükle</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </main>
+
+        {/* Footer Info */}
+        <footer className="bg-slate-950 border-t border-slate-900 px-6 py-2 flex items-center justify-between text-xs text-slate-500 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></span>
+            <span>İpucu: XML veya XSLT dosyasını ekranın herhangi bir yerine sürükleyip bırakarak yükleyebilirsiniz.</span>
+          </div>
+          <div>
+            <span>Açık Kaynak Kodlu © 2026 Devatek | UNI XML&amp;XSLT</span>
+          </div>
+        </footer>
+      </div>
+    )
+  }
+
   return (
     <div 
       className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white"
@@ -1372,13 +1698,54 @@ function App() {
 
         {/* Global Toolbar */}
         <div className="flex items-center gap-3">
+          {/* Template Selection Dropdown */}
+          <div className="flex items-center gap-1.5">
+            <select
+              value=""
+              onChange={(e) => {
+                const val = e.target.value
+                if (val === 'default') {
+                  loadDefaultSample()
+                } else if (val === 'simple') {
+                  if (!xmlContent.trim()) updateXmlContent(DEFAULT_XML)
+                  updateXsltContent(SIMPLE_XSLT)
+                } else if (val === 'empty') {
+                  if (!xmlContent.trim()) updateXmlContent(DEFAULT_XML)
+                  updateXsltContent(EMPTY_XSLT)
+                } else if (val.startsWith('custom-')) {
+                  const idx = parseInt(val.replace('custom-', ''))
+                  const t = customTemplates[idx]
+                  if (t) {
+                    if (!xmlContent.trim()) updateXmlContent(DEFAULT_XML)
+                    updateXsltContent(t.content)
+                  }
+                }
+              }}
+              className="bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-indigo-400 hover:text-indigo-300 focus:outline-none cursor-pointer font-semibold transition"
+            >
+              <option value="" disabled>Şablon Kütüphanesi</option>
+              <option value="default">Varsayılan Şablon (UBL-TR)</option>
+              <option value="simple">Sade Tablo Tasarımı</option>
+              <option value="empty">Boş Şablon</option>
+              {customTemplates.length > 0 && (
+                <optgroup label="Kaydedilmiş Şablonlarınız" className="bg-slate-950 text-slate-300">
+                  {customTemplates.map((t, idx) => (
+                    <option key={idx} value={`custom-${idx}`}>
+                      {t.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
+
           <button
             onClick={loadDefaultSample}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 transition duration-150 text-indigo-400 hover:text-indigo-300 cursor-pointer"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 hover:border-indigo-500/30 transition duration-150 text-indigo-400 hover:text-indigo-300 cursor-pointer"
             title="Sistemdeki varsayılan e-fatura verilerini ve şablonunu yükler."
           >
-            <Info className="h-3.5 w-3.5" />
-            Varsayılan Şablonu Yükle
+            <Sparkles className="h-3.5 w-3.5" />
+            Şablonum Yok (Varsayılanı Yükle)
           </button>
 
           {updateAvailable && (
@@ -2423,13 +2790,117 @@ function App() {
               >
                 
                 {previewActiveTab === 'preview' ? (
-                  <iframe 
-                    ref={iframeRef}
-                    srcDoc={srcDocValue}
-                    onLoad={handleIframeLoad}
-                    className="w-full h-full border-none bg-slate-900"
-                    title="Fatura Canlı Önizleme"
-                  />
+                  !xmlContent.trim() || !xsltContent.trim() ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-950 text-slate-300 relative select-none">
+                      <div className="max-w-md space-y-4">
+                        {!xmlContent.trim() ? (
+                          <>
+                            <div className="mx-auto h-12 w-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                              <FileCode className="h-6 w-6" />
+                            </div>
+                            <h3 className="text-sm font-bold text-white">XML Fatura Verisi Eksik</h3>
+                            <p className="text-xs text-slate-400 leading-relaxed">
+                              Tasarımı görüntülemek için sol taraftaki editöre bir XML fatura içeriği yazın veya dosya yükleyin.
+                            </p>
+                            <div className="flex justify-center gap-3">
+                              <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition">
+                                <Upload className="h-3.5 w-3.5" />
+                                XML Dosyası Yükle
+                                <input
+                                  type="file"
+                                  accept=".xml"
+                                  onChange={(e) => handleFileUploadWrapper(e, 'xml')}
+                                  className="hidden"
+                                />
+                              </label>
+                              <button
+                                onClick={() => updateXmlContent(DEFAULT_XML)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-200 hover:text-white text-xs font-semibold transition cursor-pointer"
+                              >
+                                Örnek Veri Yükle
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="mx-auto h-12 w-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                              <Sparkles className="h-6 w-6" />
+                            </div>
+                            <h3 className="text-sm font-bold text-white">XSLT Tasarım Şablonu Eksik</h3>
+                            <p className="text-xs text-slate-400 leading-relaxed">
+                              XML fatura veriniz yüklendi. Görsel çıktıyı görebilmek için bir XSLT şablonu yükleyin veya aşağıdaki hazır şablonlardan birini uygulayın.
+                            </p>
+                            <div className="flex flex-col gap-3">
+                              <div className="flex justify-center gap-2">
+                                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition">
+                                  <Upload className="h-3.5 w-3.5" />
+                                  XSLT Dosyası Yükle
+                                  <input
+                                    type="file"
+                                    accept=".xslt,.xsl"
+                                    onChange={(e) => handleFileUploadWrapper(e, 'xslt')}
+                                    className="hidden"
+                                  />
+                                </label>
+                              </div>
+                              
+                              <div className="pt-2 border-t border-slate-900 text-[11px] font-bold text-slate-400">
+                                Hazır Şablonlar:
+                              </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                <button
+                                  onClick={() => updateXsltContent(DEFAULT_XSLT)}
+                                  className="p-2 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-[10px] font-bold transition cursor-pointer"
+                                >
+                                  Standart
+                                </button>
+                                <button
+                                  onClick={() => updateXsltContent(SIMPLE_XSLT)}
+                                  className="p-2 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-[10px] font-bold transition cursor-pointer"
+                                >
+                                  Sade Tablo
+                                </button>
+                                <button
+                                  onClick={() => updateXsltContent(EMPTY_XSLT)}
+                                  className="p-2 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-[10px] font-bold transition cursor-pointer"
+                                >
+                                  Boş Şablon
+                                </button>
+                              </div>
+
+                              {customTemplates.length > 0 && (
+                                <>
+                                  <div className="pt-2 border-t border-slate-900 text-[11px] font-bold text-slate-400">
+                                    Kaydedilmiş Özel Şablonlarınız:
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 max-h-24 overflow-y-auto scrollbar-thin">
+                                    {customTemplates.map((t, idx) => (
+                                      <button
+                                        key={idx}
+                                        onClick={() => updateXsltContent(t.content)}
+                                        className="p-2 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-[9px] font-semibold truncate transition cursor-pointer"
+                                        title={t.name}
+                                      >
+                                        {t.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <iframe 
+                      ref={iframeRef}
+                      srcDoc={srcDocValue}
+                      onLoad={handleIframeLoad}
+                      className="w-full h-full border-none bg-slate-900"
+                      title="Fatura Canlı Önizleme"
+                    />
+                  )
                 ) : null}
 
                 {previewActiveTab === 'html' && (
