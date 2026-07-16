@@ -24,10 +24,7 @@ import {
   Plus,
   Compass,
   LayoutGrid,
-  RotateCw,
   Sliders,
-  Palette,
-  Languages,
   Edit3
 } from 'lucide-react'
 import { 
@@ -39,46 +36,49 @@ import {
   updateXsltText,
   updateElementTextInXsltById,
   updateElementStyleInXsltById,
-  swapXsltElements,
-  updateWatermarkTextInXslt,
   addElementToXslt,
   removeElementFromXslt
 } from './utils/xsltTransformer'
 import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
+import { ToastContainer, useToast } from './components'
+import { useEditorStore } from './store/editorStore'
 
 
 function App() {
-  // XML & XSLT State
-  const [xmlContent, setXmlContent] = useState<string>('')
-  const [xsltContent, setXsltContent] = useState<string>('')
+  // Toast notifications hook
+  const { addToast } = useToast()
   
-  // Transform Output State
-  const [htmlOutput, setHtmlOutput] = useState<string>('')
-  const [errorMsg, setErrorMsg] = useState<string | undefined>(undefined)
-  
-  // Navigation & UI States
-  const [editorActiveTab, setEditorActiveTab] = useState<'xml' | 'xslt' | 'designer'>('xml')
-  const [previewActiveTab, setPreviewActiveTab] = useState<'preview' | 'html' | 'logs'>('preview')
-  const [editorLayout, setEditorLayout] = useState<'tabbed' | 'split'>('split')
-  const [autoRefresh, setAutoRefresh] = useState<boolean>(true)
-  const [isCopied, setIsCopied] = useState<boolean>(false)
-  const [validationStatus, setValidationStatus] = useState<{
-    xmlValid: boolean;
-    xsltValid: boolean;
-    xmlError?: string;
-    xsltError?: string;
-  }>({ xmlValid: true, xsltValid: true })
+  // Zustand centralized store hook
+  const {
+    xmlContent, setXmlContent,
+    xsltContent, setXsltContent,
+    htmlOutput, setHtmlOutput,
+    errorMsg, setErrorMsg,
+    editorActiveTab, setEditorActiveTab,
+    previewActiveTab, setPreviewActiveTab,
+    editorLayout, setEditorLayout,
+    autoRefresh, setAutoRefresh,
+    isCopied, setIsCopied,
+    validationStatus, setValidationStatus,
+    iframeLogs, setIframeLogs,
+    zoomPercent, setZoomPercent,
+    editorWidthPercent, setEditorWidthPercent,
+    isAutoFit, setIsAutoFit,
+    inspectorActive, setInspectorActive,
+    designerActive, setDesignerActive,
+    inspectorStatus, setInspectorStatus,
+    customTemplates, setCustomTemplates,
+    saveTemplateName, setSaveTemplateName,
+    isSavingTemplate, setIsSavingTemplate,
+    updateAvailable, setUpdateAvailable,
+    isUpdating, setIsUpdating,
+    updateCheckStatus, setUpdateCheckStatus,
+    isDragging, setIsDragging,
+    hasDismissedXslt, setHasDismissedXslt,
+    appTheme, setAppTheme
+  } = useEditorStore();
 
-  // A4 Preview & Zoom States
-  const [previewLayout] = useState<'A4' | 'fit'>('A4')
-  const [zoomPercent, setZoomPercent] = useState<number>(85)
-  const [editorWidthPercent, setEditorWidthPercent] = useState<number>(42)
-  const [isAutoFit, setIsAutoFit] = useState<boolean>(true)
-
-  // Inspector & Designer States
-  const [inspectorActive, setInspectorActive] = useState<boolean>(false)
-  const [designerActive, setDesignerActive] = useState<boolean>(false)
-  const [inspectorStatus, setInspectorStatus] = useState<string | null>(null)
+  const previewLayout = 'A4';
 
   // Selected Element Details (for WYSIWYG Styler)
   const [selectedSelector, setSelectedSelector] = useState<string>('')
@@ -98,32 +98,31 @@ function App() {
   const [styleFontStyle, setStyleFontStyle] = useState<string>('')
   const [styleTextDecoration, setStyleTextDecoration] = useState<string>('')
 
-  // Watermark / Stamp Details
-  const [watermarkText, setWatermarkText] = useState<string>('ÖDENDİ')
-  const [watermarkRotation, setWatermarkRotation] = useState<number>(-15)
-  const [watermarkVisible, setWatermarkVisible] = useState<boolean>(true)
-  const [watermarkColor, setWatermarkColor] = useState<string>('#ef4444')
-  
-  // Theme color details
-  const [themePrimaryColor, setThemePrimaryColor] = useState<string>('#4f46e5')
-
-  // Language State
-  const [invoiceLanguage, setInvoiceLanguage] = useState<'tr' | 'en'>('tr')
-
-  // Custom template library states
-  const [customTemplates, setCustomTemplates] = useState<Array<{ name: string, fileName: string, content: string }>>([])
-  const [saveTemplateName, setSaveTemplateName] = useState('')
-  const [isSavingTemplate, setIsSavingTemplate] = useState(false)
-
   const loadCustomTemplates = async () => {
     try {
       const res = await fetch('/api/list-templates')
       if (res.ok) {
         const data = await res.json()
         setCustomTemplates(data)
+        addToast({
+          type: 'success',
+          message: 'Şablonlar Yüklendi',
+          description: `${data.length} şablon bulundu`
+        })
+      } else {
+        addToast({
+          type: 'warning',
+          message: 'Şablon Yükleme Başarısız',
+          description: 'Şablonlar yüklenemedi'
+        })
       }
     } catch (err) {
       console.error('Failed to load custom templates:', err)
+      addToast({
+        type: 'error',
+        message: 'Şablon Hatası',
+        description: 'Şablonlar yüklenirken hata oluştu'
+      })
     }
   }
 
@@ -139,10 +138,7 @@ function App() {
     }
   }, [previewActiveTab])
 
-  // Auto updater states
-  const [updateAvailable, setUpdateAvailable] = useState(false)
-  const [isUpdating, setIsUpdating] = useState(false)
-  const [updateCheckStatus, setUpdateCheckStatus] = useState<string | null>(null)
+  // Auto updater states (Zustand state references)
 
   const checkUpdates = async () => {
     try {
@@ -151,31 +147,59 @@ function App() {
         const data = await res.json()
         if (data.updateAvailable) {
           setUpdateAvailable(true)
+          addToast({
+            type: 'info',
+            message: 'Güncelleme Mevcut',
+            description: `Yeni sürüm ${data.version} kullanılabilir`
+          })
         }
       }
     } catch (err) {
       console.error('Failed to check updates:', err)
+      addToast({
+        type: 'warning',
+        message: 'Güncelleme Kontrolü Başarısız',
+        description: 'Güncellemeler kontrol edilemedi'
+      })
     }
   }
 
   const triggerUpdate = async () => {
     setIsUpdating(true)
     setUpdateCheckStatus('Uygulama güncelleniyor (git pull & npm install)... Lütfen bu sayfayı kapatmayın.')
+    addToast({
+      type: 'info',
+      message: 'Güncelleme Başlıyor',
+      description: 'Uygulama güncelleniyor, lütfen bekleyiniz...'
+    })
     try {
       const res = await fetch('/api/trigger-update', { method: 'POST' })
       if (res.ok) {
         setUpdateCheckStatus('Güncelleme başarıyla tamamlandı! Sayfa 3 saniye içinde yenilenecek.')
+        addToast({
+          type: 'success',
+          message: 'Güncelleme Tamamlandı',
+          description: 'Sayfa yeniden yüklenecek...'
+        })
         setTimeout(() => {
           window.location.reload()
         }, 3000)
       } else {
         const data = await res.json()
-        alert(`Güncelleme başarısız oldu: ${data.error || 'Bilinmeyen hata'}`)
+        addToast({
+          type: 'error',
+          message: 'Güncelleme Başarısız',
+          description: data.error || 'Bilinmeyen hata'
+        })
         setUpdateCheckStatus(null)
       }
     } catch (err) {
       console.error(err)
-      alert('Güncelleme hatası oluştu.')
+      addToast({
+        type: 'error',
+        message: 'Güncelleme Hatası',
+        description: 'Güncelleme işlemi sırasında hata oluştu'
+      })
       setUpdateCheckStatus(null)
     } finally {
       setIsUpdating(false)
@@ -187,11 +211,7 @@ function App() {
     checkUpdates()
   }, [])
 
-  // Drag & Drop State
-  const [isDragging, setIsDragging] = useState<boolean>(false)
-
-  // XSLT Banner State
-  const [hasDismissedXslt, setHasDismissedXslt] = useState<boolean>(false)
+  // Drag & Drop / Banner state (Zustand state references)
 
   // Editor References
   const xmlEditorRef = useRef<any>(null)
@@ -247,10 +267,16 @@ function App() {
           iframeDoc.body.style.backgroundColor = '#ffffff'
           iframeDoc.body.style.transition = 'transform 0.15s ease-out'
           
-          // Set root HTML element styling of the iframe to fit the dark theme and scroll natively
+          // Set root HTML element styling of the iframe to fit the theme and scroll natively
           const htmlEl = iframeDoc.documentElement
           if (htmlEl) {
-            htmlEl.style.backgroundColor = '#0b0f19' // matching slate-950
+            let bgBehindSheet = '#0b0a11' // default dark (linear)
+            if (appTheme === 'vercel') bgBehindSheet = '#000000'
+            else if (appTheme === 'forest') bgBehindSheet = '#080c0a'
+            else if (appTheme === 'stripe') bgBehindSheet = '#f6f9fc'
+            else if (appTheme === 'notion') bgBehindSheet = '#fcfbfa'
+
+            htmlEl.style.backgroundColor = bgBehindSheet
             htmlEl.style.overflowY = 'auto'
             htmlEl.style.height = '100%'
             htmlEl.style.padding = '0'
@@ -262,7 +288,7 @@ function App() {
 
     const timer = setTimeout(applyIframeZoom, 100)
     return () => clearTimeout(timer)
-  }, [zoomPercent, htmlOutput, previewActiveTab])
+  }, [zoomPercent, htmlOutput, previewActiveTab, appTheme])
 
   const handleXmlEditorMount = (editor: any) => {
     xmlEditorRef.current = editor
@@ -338,9 +364,19 @@ function App() {
     const result = transformXmlWithXslt(xmlContent, xsltContent)
     if (result.error) {
       setErrorMsg(result.error)
+      addToast({
+        type: 'error',
+        message: 'XSLT Dönüştürme Hatası',
+        description: result.error.substring(0, 150)
+      })
     } else {
       setErrorMsg(undefined)
       setHtmlOutput(result.html)
+      addToast({
+        type: 'success',
+        message: 'Dönüştürme Başarılı',
+        description: 'XML/XSLT başarıyla işlendi'
+      })
     }
   }
 
@@ -448,6 +484,31 @@ function App() {
     const innerDoc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
     if (!innerDoc) return
 
+    const iframeWindow = iframeRef.current.contentWindow;
+    if (iframeWindow) {
+      const win = iframeWindow as any;
+      setIframeLogs([]);
+      
+      win.onerror = (message: any, _source: any, lineno: any, colno: any) => {
+        const errStr = `[Hata] ${message} (${lineno}:${colno})`;
+        setIframeLogs(prev => [...prev, errStr]);
+        return false;
+      };
+
+      try {
+        if (win.console && win.console.error) {
+          const originalConsoleError = win.console.error;
+          win.console.error = (...args: any[]) => {
+            const errStr = `[Konsol Hatası] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}`;
+            setIframeLogs(prev => [...prev, errStr]);
+            originalConsoleError.apply(win.console, args);
+          };
+        }
+      } catch (e) {
+        console.warn("Could not patch console.error", e);
+      }
+    }
+
     // Apply document styling & scale
     const scale = zoomPercent / 100
     if (innerDoc.body) {
@@ -542,6 +603,15 @@ function App() {
             target.focus()
             target.setAttribute('data-original-text', target.innerText || '')
             target.setAttribute('data-xslt-id-editable', target.getAttribute('data-xslt-id') || '')
+
+            // Pressing Enter will blur (which triggers focusout to save)
+            const handleEnter = (ev: KeyboardEvent) => {
+              if (ev.key === 'Enter' && !ev.shiftKey) {
+                ev.preventDefault()
+                target.blur()
+              }
+            }
+            target.addEventListener('keydown', handleEnter, { once: true })
           }
         }
       })
@@ -568,65 +638,80 @@ function App() {
     }
   }
 
-  // Sync Designer Toolbox values from current XSLT content
-  useEffect(() => {
-    // 1. Watermark Rotation
-    const rot = getXsltStyleValue(xsltContent, '.watermark-stamp', 'transform')
-    if (rot) {
-      const match = rot.match(/rotate\(([-\d]+)deg\)/)
-      if (match) setWatermarkRotation(parseInt(match[1]))
-    }
-    
-    // 2. Watermark Visibility
-    const disp = getXsltStyleValue(xsltContent, '.watermark-stamp', 'display')
-    if (disp) {
-      setWatermarkVisible(disp !== 'none')
-    } else {
-      setWatermarkVisible(xsltContent.includes('watermark-stamp'))
-    }
-    
-    // 3. Watermark Color
-    const color = getXsltStyleValue(xsltContent, '.watermark-stamp', 'color')
-    if (color) {
-      setWatermarkColor(color)
-    }
 
-    // 4. Primary Theme Color
-    const themeColor = getXsltStyleValue(xsltContent, '.logo-section', 'color')
-    if (themeColor) {
-      setThemePrimaryColor(themeColor)
-    }
-    
-    // 5. Watermark Text content
-    const textStart = xsltContent.indexOf('<div class="watermark-stamp">')
-    if (textStart !== -1) {
-      const textEnd = xsltContent.indexOf('</div>', textStart)
-      if (textEnd !== -1) {
-        const textVal = xsltContent.substring(textStart + 29, textEnd)
-        if (!textVal.includes('<')) {
-          setWatermarkText(textVal.trim())
-        }
-      }
-    }
-  }, [xsltContent])
 
   // Heuristic Search and Jump in XSLT code editor
   const findLineInCode = (code: string, searchTerms: string[]): number => {
     const lines = code.split('\n')
     
-    // 1. Exact match (case sensitive) in priority order
+    // Helper to check if a line matches a term
+    const matchesTerm = (lineContent: string, term: string): boolean => {
+      const trimmedTerm = term.trim()
+      if (!trimmedTerm) return false
+      
+      // 1. If term represents a class (e.g. .company-name or class="company-name" or class='company-name')
+      let className = ''
+      if (trimmedTerm.startsWith('.')) {
+        className = trimmedTerm.substring(1)
+      } else if (trimmedTerm.startsWith('class="') && trimmedTerm.endsWith('"')) {
+        className = trimmedTerm.substring(7, trimmedTerm.length - 1)
+      } else if (trimmedTerm.startsWith("class='") && trimmedTerm.endsWith("'")) {
+        className = trimmedTerm.substring(7, trimmedTerm.length - 1)
+      }
+      
+      if (className) {
+        // Find class="value" or class='value'
+        const regex = /class\s*=\s*['"]([^'"]*)['"]/gi
+        let match;
+        regex.lastIndex = 0;
+        while ((match = regex.exec(lineContent)) !== null) {
+          const classValue = match[1] || ''
+          const classes = classValue.split(/\s+/).map(c => c.trim()).filter(Boolean)
+          if (classes.includes(className)) {
+            return true
+          }
+        }
+        return false
+      }
+      
+      // 2. If term represents an ID (e.g. #logo or id="logo" or id='logo')
+      let idName = ''
+      if (trimmedTerm.startsWith('#')) {
+        idName = trimmedTerm.substring(1)
+      } else if (trimmedTerm.startsWith('id="') && trimmedTerm.endsWith('"')) {
+        idName = trimmedTerm.substring(4, trimmedTerm.length - 1)
+      } else if (trimmedTerm.startsWith("id='") && trimmedTerm.endsWith("'")) {
+        idName = trimmedTerm.substring(4, trimmedTerm.length - 1)
+      }
+      
+      if (idName) {
+        const regex = /id\s*=\s*['"]([^'"]*)['"]/gi
+        let match;
+        regex.lastIndex = 0;
+        while ((match = regex.exec(lineContent)) !== null) {
+          const idValue = (match[1] || '').trim()
+          if (idValue === idName) {
+            return true
+          }
+        }
+        return false
+      }
+      
+      // 3. Default exact case-sensitive matching
+      return lineContent.includes(term)
+    }
+
+    // 1. First pass: try matching each term (highest priority first)
     for (const term of searchTerms) {
-      if (!term.trim()) continue
       for (let i = 0; i < lines.length; i++) {
-        if (lines[i].includes(term)) {
+        if (matchesTerm(lines[i], term)) {
           return i + 1
         }
       }
     }
     
-    // 2. Case-insensitive match fallback
+    // 2. Second pass: case-insensitive fallback (for standard terms)
     for (const term of searchTerms) {
-      if (!term.trim()) continue
       const lower = term.toLowerCase()
       for (let i = 0; i < lines.length; i++) {
         if (lines[i].toLowerCase().includes(lower)) {
@@ -634,6 +719,7 @@ function App() {
         }
       }
     }
+    
     return 1
   }
 
@@ -651,7 +737,19 @@ function App() {
     const handleInspectorMessage = (event: MessageEvent) => {
       if (!event.data) return
 
-      const { source, text, className, tagName, id, original, current, targetTagName, targetSrc, targetHref, xsltId, styles } = event.data
+      const { source, text, className, tagName, id, original, current, targetTagName, targetSrc, targetHref, xsltId, styles, message, lineno, colno, args } = event.data
+
+      if (source === 'iframe-error') {
+        const errStr = `[Hata] ${message} (${lineno}:${colno})`;
+        setIframeLogs(prev => [...prev, errStr]);
+        return;
+      }
+
+      if (source === 'iframe-console-error') {
+        const errStr = `[Konsol Hatası] ${args.join(' ')}`;
+        setIframeLogs(prev => [...prev, errStr]);
+        return;
+      }
 
       // Case 1: In-place text modifications (Double clicked leaf texts)
       if (source === 'xslt-text-edit') {
@@ -770,6 +868,13 @@ function App() {
     return () => window.removeEventListener('message', handleInspectorMessage)
   }, [xsltContent, designerActive, inspectorActive])
 
+  // Helper to extract a clean hex color from style values (removing !important etc.)
+  const cleanHexColor = (colorString: string): string => {
+    if (!colorString) return '#333333'
+    const match = colorString.trim().match(/#[0-9a-fA-F]{6}/)
+    return match ? match[0] : '#333333'
+  }
+
   // Helper to convert rgb(r, g, b) colors to #hex format for HTML5 color input
   const rgbToHex = (rgbString: string): string => {
     if (!rgbString) return ''
@@ -825,65 +930,11 @@ function App() {
     }
   }
 
-  // Watermark/Stamp handlers
-  const handleWatermarkTextChange = (newVal: string) => {
-    setWatermarkText(newVal)
-    // Secure XML DOM based replacement to avoid file corruption
-    const updated = updateWatermarkTextInXslt(xsltContent, newVal)
-    if (updated !== xsltContent) {
-      updateXsltContent(updated)
-    }
-  }
 
-  const handleWatermarkRotationChange = (deg: number) => {
-    setWatermarkRotation(deg)
-    const updated = updateXsltStyle(xsltContent, '.watermark-stamp', 'transform', `rotate(${deg}deg)`)
-    if (updated !== xsltContent) {
-      updateXsltContent(updated)
-    }
-  }
-
-  const handleWatermarkVisibilityChange = (visible: boolean) => {
-    setWatermarkVisible(visible)
-    const updated = updateXsltStyle(xsltContent, '.watermark-stamp', 'display', visible ? 'block' : 'none')
-    if (updated !== xsltContent) {
-      updateXsltContent(updated)
-    }
-  }
-
-  const handleWatermarkColorChange = (color: string) => {
-    setWatermarkColor(color)
-    let updated = updateXsltStyle(xsltContent, '.watermark-stamp', 'color', color)
-    updated = updateXsltStyle(updated, '.watermark-stamp', 'border-color', color)
-    if (updated !== xsltContent) {
-      updateXsltContent(updated)
-    }
-  }
-
-  // Theme primary color handler
-  const handleThemeColorChange = (color: string) => {
-    setThemePrimaryColor(color)
-    let updated = updateXsltStyle(xsltContent, '.logo-section', 'color', color)
-    updated = updateXsltStyle(updated, '.grand-total', 'color', color)
-    updated = updateXsltStyle(updated, '.grand-total td', 'border-top', `2px solid ${color}`)
-    if (updated !== xsltContent) {
-      updateXsltContent(updated)
-    }
-  }
-
-  // Swap columns handler
-  const handleSwapSupplierCustomer = () => {
-    const updated = swapXsltElements(xsltContent, 'supplier-col', 'customer-col')
-    if (updated !== xsltContent) {
-      updateXsltContent(updated)
-      setInspectorStatus("Satıcı ve Alıcı kolonlarının yerleri değiştirildi.")
-      setTimeout(() => setInspectorStatus(null), 3000)
-    }
-  }
 
   // Visual layout XML addition/removals
-  const handleAddTextElement = (parentClass: string) => {
-    const updated = addElementToXslt(xsltContent, parentClass, "Yeni Metin Alanı (Düzenlemek için çift tıklayın)")
+  const handleAddTextElement = (parentSelector: string, details?: any) => {
+    const updated = addElementToXslt(xsltContent, parentSelector, "Yeni Metin Alanı (Düzenlemek için çift tıklayın)", details)
     if (updated !== xsltContent) {
       updateXsltContent(updated)
       setInspectorStatus("Boş alana yeni metin kutusu eklendi.")
@@ -942,7 +993,18 @@ function App() {
     const innerDoc = iframe.contentDocument || iframe.contentWindow?.document
     if (!innerDoc) return
 
-    const selectedEl = innerDoc.querySelector('.uni-selected-element') as HTMLElement
+    let selectedEl = innerDoc.querySelector('.uni-selected-element') as HTMLElement
+    if (!selectedEl && selectedElementDetails?.xsltId) {
+      selectedEl = innerDoc.querySelector(`[data-xslt-id="${selectedElementDetails.xsltId}"]`) as HTMLElement
+    }
+    if (!selectedEl && selectedSelector) {
+      try {
+        selectedEl = innerDoc.querySelector(selectedSelector) as HTMLElement
+      } catch (e) {
+        console.warn('Invalid selector query', e)
+      }
+    }
+
     if (selectedEl) {
       const originalText = selectedEl.innerText || ''
       selectedEl.setAttribute('data-original-text', originalText)
@@ -959,6 +1021,15 @@ function App() {
         selection.removeAllRanges()
         selection.addRange(range)
       }
+
+      // Pressing Enter will blur (which triggers focusout to save)
+      const handleEnter = (ev: KeyboardEvent) => {
+        if (ev.key === 'Enter' && !ev.shiftKey) {
+          ev.preventDefault()
+          selectedEl.blur()
+        }
+      }
+      selectedEl.addEventListener('keydown', handleEnter, { once: true })
 
       setInspectorStatus("Metin düzenleniyor... Çıkmak için Enter'a basın veya dışarıya tıklayın.")
       setTimeout(() => setInspectorStatus(null), 4000)
@@ -1094,201 +1165,6 @@ function App() {
     updateXmlContent(DEFAULT_XML)
     updateXsltContent(DEFAULT_XSLT)
     setErrorMsg(undefined)
-    setInvoiceLanguage('tr')
-  }
-
-  const translateInvoiceContent = (targetLang: 'tr' | 'en') => {
-    let content = xsltContent
-    let xml = xmlContent
-    
-    // Mapping of terms [Turkish, English]
-    const translationPairs: [string, string][] = [
-      ['e-Arşiv Fatura', 'e-Archive Invoice'],
-      ['e-FATURA', 'e-INVOICE'],
-      ['E-FATURA', 'INVOICE'],
-      ['E-Fatura Önizleme', 'E-Invoice Preview'],
-      ['Sade Fatura Tablosu', 'Simple Invoice Table'],
-      ['Yeni Şablon Tasarımı', 'New Template Design'],
-      ['Özelleştirme No:', 'Customization No:'],
-      ['Senaryo:', 'Scenario:'],
-      ['Fatura Tipi:', 'Invoice Type:'],
-      ['İlave Fatura Tipi:', 'Additional Invoice Type:'],
-      ['Fatura No:', 'Invoice No:'],
-      ['Fatura ID:', 'Invoice ID:'],
-      ['Fatura Tarihi:', 'Invoice Date:'],
-      ['Tarih:', 'Date:'],
-      ['Zaman:', 'Time:'],
-      ['Tür:', 'Type:'],
-      ['Düzenleme Tarihi:', 'Issue Date:'],
-      ['Düzenleme Zamanı:', 'Issue Time:'],
-      ['Fiili Sevk Tarihi:', 'Actual Delivery Date:'],
-      ['Son Ödeme Tarihi:', 'Payment Due Date:'],
-      ['Ödeme Yapacak Kurum', 'Paying Institution'],
-      ['Ödeme Şekli:', 'Payment Method:'],
-      ['Ödeme Şekli', 'Payment Method'],
-      ['Ödeme Tarihi:', 'Payment Date:'],
-      ['Ödeme Tarihi', 'Payment Date'],
-      ['Ödeme Notu:', 'Payment Note:'],
-      ['Ödeme Notu', 'Payment Note'],
-      ['Ödeme Koşulu:', 'Payment Term:'],
-      ['Ödeme Koşulu', 'Payment Term'],
-      ['Teslim/Bedel Ödeme Yeri', 'Delivery / Payment Location'],
-      ['Satıcı Bilgileri', 'Supplier Details'],
-      ['Alıcı Bilgileri', 'Customer Details'],
-      ['Sayın', 'Dear'],
-      ['SAYIN', 'DEAR'],
-      ['Vergi Dairesi/No:', 'Tax Office/No:'],
-      ['Vergi Dairesi:', 'Tax Office:'],
-      ['VKN:', 'Tax ID (VKN):'],
-      ['VKN/TCKN:', 'Tax ID / National ID:'],
-      ['TCKN:', 'National ID:'],
-      ['TCKN/VKN:', 'Tax / National ID:'],
-      ['E-posta:', 'Email:'],
-      ['E-Posta:', 'Email:'],
-      ['Web Sitesi:', 'Website:'],
-      ['Müşteri No:', 'Customer No:'],
-      ['İadeye Konu Olan Faturalar', 'Invoices Subject to Return'],
-      ['E-Fatura Bilgi Fişi', 'E-Invoice Info Sheet'],
-      ['İrsaliye Yerine Geçen E-Fatura Bilgi Fişi', 'E-Invoice Info Sheet Replacing Delivery Note'],
-      ['Faturalı Satış Bilgi Fişi', 'Invoiced Sales Info Sheet'],
-      ['Fatura Tahsilat Bilgi Fişi', 'Invoice Collection Info Sheet'],
-      ['Komisyonlu Fatura Tahsilat Bilgi Fişi', 'Commissioned Invoice Collection Info Sheet'],
-      ['Sıra No', 'Line No'],
-      ['Mal / Hizmet Açıklaması', 'Description of Goods / Services'],
-      ['Mal/Hizmet Açıklaması', 'Description of Goods / Services'],
-      ['Mal / Hizmet', 'Goods / Services'],
-      ['Mal/Hizmet', 'Goods/Services'],
-      ['Mal Hizmet Tutarı', 'Goods/Services Amount'],
-      ['Mal Hizmet Toplam Tutarı', 'Total Goods/Services Amount'],
-      ['Mal Hizmet', 'Goods/Services'],
-      ['Miktar', 'Quantity'],
-      ['Birim', 'Unit'],
-      ['Birim Fiyat', 'Unit Price'],
-      ['KDV Oranı (%)', 'VAT Rate (%)'],
-      ['KDV Oranı ( % )', 'VAT Rate ( % )'],
-      ['KDV Oranı', 'VAT Rate'],
-      ['KDV Tutarı', 'VAT Amount'],
-      ['Toplam Tutar', 'Total Amount'],
-      ['Tutar', 'Amount'],
-      ['Ara Toplam:', 'Subtotal:'],
-      ['Ara Toplam', 'Subtotal'],
-      ['Hesaplanan KDV', 'Calculated VAT'],
-      ['Hesaplanan', 'Calculated'],
-      ['KDV Toplamı:', 'Total VAT:'],
-      ['KDV Toplamı', 'Total VAT'],
-      ['Vergi Toplamı', 'Total Tax'],
-      ['Ödenecek Tutar:', 'Total Payable:'],
-      ['Ödenecek Tutar', 'Total Payable'],
-      ['Ödenecek Toplam Tutar:', 'Total Payable Amount:'],
-      ['Ödenecek Toplam Tutar', 'Total Payable Amount'],
-      ['ÖDENDİ', 'PAID'],
-      ['BASİT FATURA ÖNİZLEME', 'SIMPLE INVOICE PREVIEW'],
-      ['Satıcı Unvan:', 'Supplier Name:'],
-      ['Alıcı Unvan:', 'Customer Name:'],
-      ['İskonto', 'Discount'],
-      ['Toplam İskonto:', 'Total Discount:'],
-      ['Toplam İskonto', 'Total Discount'],
-      ['Vergiler Dahil Toplam Tutar:', 'Total Amount VAT Included:'],
-      ['Vergiler Dahil Toplam Tutar', 'Total Amount VAT Included'],
-      ['Vergiler Dahil Toplam Tutar(TL)', 'Total Amount VAT Included (TL)'],
-      ['Vergiler Dahil Reçete Toplam Tutarı', 'Total Prescription Amount VAT Included'],
-      ['Vergiler Hariç Reçete Toplam Tutarı', 'Total Prescription Amount VAT Excluded'],
-      ['KDV Hariç Ödenecek Tutar', 'Payable Amount Excl. VAT'],
-      ['Toplam Ödenecek Tutar', 'Total Payable Amount'],
-      ['Ödenecek Tutar(TL)', 'Payable Amount (TL)'],
-      ['KDV Dahil', 'VAT Included'],
-      ['KDV Hariç', 'VAT Excluded'],
-      ['Diğer Vergiler', 'Other Taxes'],
-      ['Mal Hizmet Toplam Tutarı:', 'Total Goods/Services Amount:'],
-      ['Mal Hizmet Toplam Tutarı', 'Total Goods/Amount'],
-      ['Yalnız', 'Only'],
-      ['YALNIZ', 'ONLY'],
-      ['KDV', 'VAT'],
-      ['Katma Değer Vergisi', 'Value Added Tax']
-    ]
-
-    // Safe word replacement checking boundary of Turkish and English alphanumeric chars
-    const replaceWordSafe = (text: string, search: string, replacement: string): string => {
-      const escaped = search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
-      const trChars = 'a-zA-Z0-9çıüğşöİIĞÜŞÇÖ'
-      const regex = new RegExp(`(?<![${trChars}])${escaped}(?![${trChars}])`, 'g')
-      return text.replace(regex, replacement)
-    }
-
-    // Sort translation pairs by search word length in descending order
-    // to prevent shorter substrings from corrupting longer phrases
-    const sortedPairs = [...translationPairs].sort((a, b) => {
-      const searchA = targetLang === 'en' ? a[0] : a[1]
-      const searchB = targetLang === 'en' ? b[0] : b[1]
-      return searchB.length - searchA.length
-    })
-
-    // Translate XSLT: Split document into HTML tags and text nodes
-    const tokens = content.split(/(<[^>]+>)/g)
-    let inStyleBlock = false
-    
-    for (let i = 0; i < tokens.length; i++) {
-      if (i % 2 === 1) {
-        // It's a tag, check if it starts/ends a style block
-        const tag = tokens[i].toLowerCase()
-        if (tag.startsWith('<style')) {
-          inStyleBlock = true
-        } else if (tag.startsWith('</style')) {
-          inStyleBlock = false
-        }
-      } else {
-        // It's a text node. Translate only if it's not inside a style block
-        let text = tokens[i]
-        if (text && !inStyleBlock) {
-          if (targetLang === 'en') {
-            sortedPairs.forEach(([tr, en]) => {
-              text = replaceWordSafe(text, tr, en)
-            })
-          } else {
-            sortedPairs.forEach(([tr, en]) => {
-              text = replaceWordSafe(text, en, tr)
-            })
-          }
-          tokens[i] = text
-        }
-      }
-    }
-    content = tokens.join('')
-
-    // Translate XML as well so dynamic cbc:Name values (like KDV) get translated in standard ways
-    const xmlTokens = xml.split(/(<[^>]+>)/g)
-    for (let i = 0; i < xmlTokens.length; i++) {
-      if (i % 2 === 0) { // Text node
-        let text = xmlTokens[i]
-        if (text) {
-          if (targetLang === 'en') {
-            sortedPairs.forEach(([tr, en]) => {
-              text = replaceWordSafe(text, tr, en)
-            })
-          } else {
-            sortedPairs.forEach(([tr, en]) => {
-              text = replaceWordSafe(text, en, tr)
-            })
-          }
-          xmlTokens[i] = text
-        }
-      }
-    }
-    xml = xmlTokens.join('')
-
-    if (targetLang === 'en') {
-      if (watermarkText === 'ÖDENDİ') {
-        setWatermarkText('PAID')
-      }
-    } else {
-      if (watermarkText === 'PAID') {
-        setWatermarkText('ÖDENDİ')
-      }
-    }
-    
-    updateXsltContent(content)
-    updateXmlContent(xml)
-    setInvoiceLanguage(targetLang)
   }
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -1333,7 +1209,7 @@ function App() {
   if (!xmlContent.trim() && !xsltContent.trim()) {
     return (
       <div 
-        className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white"
+        className={`min-h-screen flex flex-col theme-${appTheme} bg-zen-main text-zen-primary selection:bg-emerald-600 selection:text-white`}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -1440,7 +1316,27 @@ function App() {
               </button>
             )}
 
-            <div className="h-4 w-px bg-slate-805" />
+            {/* Zen Theme Switcher */}
+            <div className="flex items-center gap-1.5 bg-zen-panel p-1 rounded-lg border border-zen-subtle">
+              {[
+                { id: 'linear', color: 'bg-indigo-600', title: 'Linear Dark (Derin Koyu)' },
+                { id: 'vercel', color: 'bg-zinc-800 border border-zinc-700', title: 'Vercel Obsidian (Saf Siyah)' },
+                { id: 'forest', color: 'bg-emerald-600', title: 'Kyoto Forest (Yosun Koyu)' },
+                { id: 'stripe', color: 'bg-sky-400', title: 'Stripe Clean (Canlı Açık)' },
+                { id: 'notion', color: 'bg-amber-600', title: 'Notion Milk (Sıcak Açık)' }
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setAppTheme(t.id as any)}
+                  className={`h-4.5 w-4.5 rounded-full ${t.color} border transition transform hover:scale-110 cursor-pointer ${
+                    appTheme === t.id ? 'border-zen-primary scale-105 ring-2 ring-zen-accent/50' : 'border-transparent opacity-65 hover:opacity-100'
+                  }`}
+                  title={t.title}
+                />
+              ))}
+            </div>
+
+            <div className="h-4 w-px border-l border-zen-subtle" />
 
             <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-900 px-3 py-1.5 rounded-lg">
               <span className="relative flex h-2 w-2">
@@ -1653,7 +1549,7 @@ function App() {
 
   return (
     <div 
-      className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white"
+      className={`min-h-screen flex flex-col theme-${appTheme} bg-zen-main text-zen-primary selection:bg-emerald-600 selection:text-white`}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -1760,7 +1656,27 @@ function App() {
             </button>
           )}
 
-          <div className="h-4 w-px bg-slate-805" />
+            {/* Zen Theme Switcher */}
+            <div className="flex items-center gap-1.5 bg-zen-panel p-1 rounded-lg border border-zen-subtle">
+              {[
+                { id: 'linear', color: 'bg-indigo-600', title: 'Linear Dark (Derin Koyu)' },
+                { id: 'vercel', color: 'bg-zinc-800 border border-zinc-700', title: 'Vercel Obsidian (Saf Siyah)' },
+                { id: 'forest', color: 'bg-emerald-600', title: 'Kyoto Forest (Yosun Koyu)' },
+                { id: 'stripe', color: 'bg-sky-400', title: 'Stripe Clean (Canlı Açık)' },
+                { id: 'notion', color: 'bg-amber-600', title: 'Notion Milk (Sıcak Açık)' }
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setAppTheme(t.id as any)}
+                  className={`h-4.5 w-4.5 rounded-full ${t.color} border transition transform hover:scale-110 cursor-pointer ${
+                    appTheme === t.id ? 'border-zen-primary scale-105 ring-2 ring-zen-accent/50' : 'border-transparent opacity-65 hover:opacity-100'
+                  }`}
+                  title={t.title}
+                />
+              ))}
+            </div>
+
+            <div className="h-4 w-px border-l border-zen-subtle" />
 
           {/* Auto transform status */}
           <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-900 px-3 py-1.5 rounded-lg">
@@ -1918,180 +1834,10 @@ function App() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  
-                  {/* Card 1: Renk Teması */}
-                  <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
-                      <Palette className="h-4 w-4 text-indigo-400" />
-                      Kurumsal Renk Teması
-                    </h4>
-                    <div className="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-900">
-                      <input 
-                        type="color" 
-                        value={themePrimaryColor} 
-                        onChange={(e) => handleThemeColorChange(e.target.value)}
-                        className="w-10 h-10 rounded border-0 bg-transparent cursor-pointer shrink-0"
-                      />
-                      <div>
-                        <div className="text-xs font-semibold text-white">Birincil Tema Rengi</div>
-                        <div className="text-[10px] text-slate-500 mt-0.5">{themePrimaryColor}</div>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-slate-500 leading-normal">
-                      * Logo rengi, fatura çizgileri ve KDV başlıkları bu renkle otomatik güncellenir.
-                    </p>
-                  </div>
-
-                  {/* Card 2: Eleman Yerleşimi */}
-                  <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4 flex flex-col justify-between">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
-                        <Columns className="h-4 w-4 text-blue-400" />
-                        Eleman Konum Sıralaması
-                      </h4>
-                      <p className="text-[11px] text-slate-500 leading-relaxed mt-2">
-                        Fatura üzerindeki Satıcı ve Alıcı kolonlarının yerlerini tek tıkla swap edebilirsiniz. Bu işlem XSLT kodunu da günceller.
-                      </p>
-                    </div>
-                    <button 
-                      onClick={handleSwapSupplierCustomer}
-                      className="w-full py-2.5 px-4 rounded-lg bg-slate-950 border border-slate-800 hover:bg-slate-900 hover:border-slate-700 text-xs font-bold text-white transition flex items-center justify-center gap-2 cursor-pointer mt-4"
-                    >
-                      <RefreshCw className="h-4 w-4 text-indigo-400" />
-                      Satıcı &amp; Alıcı Yerini Swap Et
-                    </button>
-                  </div>
-
-                  {/* Card 3: Yeni Metin Ekleme */}
-                  <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4 col-span-1 md:col-span-2">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
-                      <Plus className="h-4 w-4 text-emerald-400" />
-                      Boş Alanlara Yeni Metin / Metin Kutusu Ekle
-                    </h4>
-                    <p className="text-[11px] text-slate-500 leading-normal">
-                      Fatura taslağı üzerindeki aşağıdaki ana bölgelere doğrudan tıklayarak düzenlenebilir boş metin kutuları (div) ekleyebilirsiniz:
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <button
-                        onClick={() => handleAddTextElement('supplier-col')}
-                        className="py-2 px-3 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        🏢 Satıcı Bölgesine Ekle
-                      </button>
-                      <button
-                        onClick={() => handleAddTextElement('customer-col')}
-                        className="py-2 px-3 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        👤 Alıcı Bölgesine Ekle
-                      </button>
-                      <button
-                        onClick={() => handleAddTextElement('invoice-info-section')}
-                        className="py-2 px-3 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        📝 Detay/Bilgi Bölgesine Ekle
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Card 4: Kaşe / Filigran Katmanı */}
-                  <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4 col-span-1 md:col-span-2">
-                    <div className="flex items-center justify-between border-b border-slate-900 pb-2">
-                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <RotateCw className="h-4 w-4 text-rose-400" />
-                        Kaşe / Filigran Katmanı
-                      </h4>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          checked={watermarkVisible} 
-                          onChange={(e) => handleWatermarkVisibilityChange(e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-600 peer-checked:after:bg-white"></div>
-                      </label>
-                    </div>
-
-                    {watermarkVisible ? (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-1">
-                          <span className="text-[11px] text-slate-400">Kaşe Metni:</span>
-                          <input 
-                            type="text" 
-                            value={watermarkText} 
-                            onChange={(e) => handleWatermarkTextChange(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-rose-500"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[11px] text-slate-400">
-                            <span>Kaşe Döndürme (Açı):</span>
-                            <span className="font-mono text-white font-bold">{watermarkRotation}°</span>
-                          </div>
-                          <input 
-                            type="range" 
-                            min="-90" 
-                            max="90" 
-                            value={watermarkRotation} 
-                            onChange={(e) => handleWatermarkRotationChange(parseInt(e.target.value))}
-                            className="w-full h-1 mt-2.5 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-rose-500"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <span className="text-[11px] text-slate-400">Kaşe Rengi:</span>
-                          <div className="flex items-center gap-2 mt-1">
-                            <input 
-                              type="color" 
-                              value={watermarkColor} 
-                              onChange={(e) => handleWatermarkColorChange(e.target.value)}
-                              className="w-8 h-8 border-0 bg-transparent cursor-pointer rounded shrink-0"
-                            />
-                            <span className="text-[10px] font-mono text-slate-500">{watermarkColor}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-500 italic">Kaşe / Filigran katmanı devre dışı bırakılmıştır.</p>
-                    )}
-                  </div>
-
-                  {/* Card 5: Fatura Dil Seçimi */}
-                  <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4 col-span-1 md:col-span-2">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
-                      <Languages className="h-4 w-4 text-indigo-400" />
-                      Fatura Dil Seçimi / Invoice Language
-                    </h4>
-                    <p className="text-[11px] text-slate-500 leading-normal">
-                      Faturadaki tüm başlık ve etiketleri (Satıcı/Alıcı Bilgileri, Ara Toplam, KDV, Ödenecek Tutar vb.) tek tıkla Türkçe veya İngilizce diline çevirebilirsiniz.
-                    </p>
-                    <div className="grid grid-cols-2 gap-3 max-w-sm">
-                      <button
-                        onClick={() => translateInvoiceContent('tr')}
-                        className={`py-2 px-4 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer border ${
-                          invoiceLanguage === 'tr'
-                            ? 'bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white shadow'
-                            : 'bg-slate-950 hover:bg-slate-900 border-slate-800 text-slate-300'
-                        }`}
-                      >
-                        <span>🇹🇷</span> Türkçe (TR)
-                      </button>
-                      <button
-                        onClick={() => translateInvoiceContent('en')}
-                        className={`py-2 px-4 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer border ${
-                          invoiceLanguage === 'en'
-                            ? 'bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white shadow'
-                            : 'bg-slate-950 hover:bg-slate-900 border-slate-800 text-slate-300'
-                        }`}
-                      >
-                        <span>🇬🇧</span> English (EN)
-                      </button>
-                    </div>
-                  </div>
+                <div className="space-y-6">
 
                   {/* Card 6: Seçilen Eleman Stilleri */}
-                  <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4 col-span-1 md:col-span-2">
+                  <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4">
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
                       <Sliders className="h-4 w-4 text-purple-400" />
                       Seçilen Eleman Stil Ayarları (WYSIWYG)
@@ -2217,7 +1963,7 @@ function App() {
                               <span>Yazı Rengi:</span>
                               <input 
                                 type="color" 
-                                value={styleColor.startsWith('#') && styleColor.length === 7 ? styleColor : '#333333'} 
+                                value={cleanHexColor(styleColor)} 
                                 onChange={(e) => handleStyleChange('color', e.target.value)}
                                 className="w-7 h-7 border-0 bg-transparent cursor-pointer rounded shrink-0"
                               />
@@ -2243,7 +1989,7 @@ function App() {
                           <div className="col-span-1 md:col-span-2 pt-4 border-t border-slate-900 flex flex-col gap-2.5">
                             <div className="flex gap-2">
                               <button
-                                onClick={() => handleAddTextElement(selectedSelector.substring(1))}
+                                onClick={() => handleAddTextElement(selectedSelector, selectedElementDetails)}
                                 className="flex-1 py-2 px-3 bg-indigo-950 hover:bg-indigo-900 border border-indigo-900/60 hover:border-indigo-700 text-xs font-bold text-indigo-300 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
                               >
                                 <Plus className="h-4 w-4" />
@@ -2357,7 +2103,7 @@ function App() {
                     <Editor
                       height="100%"
                       language="xml"
-                      theme="vs-dark"
+                      theme={appTheme === 'stripe' || appTheme === 'notion' ? 'light' : 'vs-dark'}
                       value={xmlContent}
                       onChange={(v) => updateXmlContent(v || '')}
                       onMount={handleXmlEditorMount}
@@ -2375,7 +2121,7 @@ function App() {
                     <Editor
                       height="100%"
                       language="xml"
-                      theme="vs-dark"
+                      theme={appTheme === 'stripe' || appTheme === 'notion' ? 'light' : 'vs-dark'}
                       value={xsltContent}
                       onChange={(v) => updateXsltContent(v || '')}
                       onMount={handleXsltEditorMount}
@@ -2446,7 +2192,7 @@ function App() {
                     <Editor
                       height="100%"
                       language="xml"
-                      theme="vs-dark"
+                      theme={appTheme === 'stripe' || appTheme === 'notion' ? 'light' : 'vs-dark'}
                       value={xmlContent}
                       onChange={(v) => updateXmlContent(v || '')}
                       onMount={handleXmlEditorMount}
@@ -2524,7 +2270,7 @@ function App() {
                     <Editor
                       height="100%"
                       language="xml"
-                      theme="vs-dark"
+                      theme={appTheme === 'stripe' || appTheme === 'notion' ? 'light' : 'vs-dark'}
                       value={xsltContent}
                       onChange={(v) => updateXsltContent(v || '')}
                       onMount={handleXsltEditorMount}
@@ -2597,76 +2343,21 @@ function App() {
             <div className="flex items-center gap-1.5">
               {/* Target / Inspector Toggle (Only visible in Preview tab) */}
               {previewActiveTab === 'preview' && !errorMsg && (
-                <>
-                  <button
-                    onClick={() => {
-                      setInspectorActive(!inspectorActive)
-                      setDesignerActive(false)
-                    }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
-                      inspectorActive 
-                        ? 'bg-blue-600 hover:bg-blue-500 border-blue-500 text-white shadow shadow-blue-600/20' 
-                        : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
-                    }`}
-                    title="Faturadaki bir elemana tıklayarak koddaki satırını bulur."
-                  >
-                    <Target className="h-3.5 w-3.5" />
-                    Koda Git
-                  </button>
-
-                  {/* WYSIWYG Visual Designer Mode Toggle */}
-                  <button
-                    onClick={() => {
-                      const nextState = !designerActive
-                      setDesignerActive(nextState)
-                      setInspectorActive(false)
-                      if (nextState) {
-                        setEditorActiveTab('designer')
-                      } else {
-                        setEditorActiveTab('xslt')
-                      }
-                      setSelectedSelector('') // clear styling targets
-                    }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
-                      designerActive 
-                        ? 'bg-purple-600 hover:bg-purple-600 border-purple-600 text-white shadow shadow-purple-600/20' 
-                        : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
-                    }`}
-                    title="Sol panelde görsel tasarım arayüzünü (hizalama, genişlik, metin düzenleme) açar."
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                    Görsel Tasarımcı (Beta)
-                  </button>
-                </>
-              )}
-
-
-
-              {previewActiveTab === 'preview' && (
-                <div className="flex items-center gap-1 bg-slate-900/60 p-0.5 rounded-lg border border-slate-800">
-                  <button
-                    onClick={() => translateInvoiceContent('tr')}
-                    className={`px-2 py-1.5 rounded-md text-[10px] font-bold transition duration-150 cursor-pointer flex items-center gap-1 ${
-                      invoiceLanguage === 'tr'
-                        ? 'bg-indigo-600 text-white shadow'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                    title="Faturayı Türkçe diline çevirir."
-                  >
-                    🇹🇷 TR
-                  </button>
-                  <button
-                    onClick={() => translateInvoiceContent('en')}
-                    className={`px-2 py-1.5 rounded-md text-[10px] font-bold transition duration-150 cursor-pointer flex items-center gap-1 ${
-                      invoiceLanguage === 'en'
-                        ? 'bg-indigo-600 text-white shadow'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                    title="Faturayı İngilizce diline çevirir."
-                  >
-                    🇬🇧 EN
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    setInspectorActive(!inspectorActive)
+                    setDesignerActive(false)
+                  }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+                    inspectorActive 
+                      ? 'bg-blue-600 hover:bg-blue-500 border-blue-500 text-white shadow shadow-blue-600/20' 
+                      : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
+                  }`}
+                  title="Faturadaki bir elemana tıklayarak koddaki satırını bulur."
+                >
+                  <Target className="h-3.5 w-3.5" />
+                  Koda Git
+                </button>
               )}
 
               {previewActiveTab === 'preview' && !errorMsg && (
@@ -2908,7 +2599,7 @@ function App() {
                     <Editor
                       height="100%"
                       language="html"
-                      theme="vs-dark"
+                      theme={appTheme === 'stripe' || appTheme === 'notion' ? 'light' : 'vs-dark'}
                       value={htmlOutput}
                       options={{
                         readOnly: true,
@@ -2943,6 +2634,20 @@ function App() {
                           <pre className="mt-2 text-xs overflow-x-auto bg-rose-950/60 p-3 rounded border border-rose-900/60 whitespace-pre-wrap leading-relaxed text-rose-200">
                             {errorMsg}
                           </pre>
+                        </div>
+                      </div>
+                    )}
+
+                    {iframeLogs.length > 0 && (
+                      <div className="bg-rose-950/20 border border-rose-900/60 text-rose-200 rounded-lg p-4 mb-5">
+                        <div className="font-bold text-rose-400 text-xs mb-2 flex items-center gap-1.5">
+                          <AlertTriangle className="h-4 w-4" />
+                          Önizleme Script Hataları
+                        </div>
+                        <div className="space-y-1 max-h-40 overflow-y-auto">
+                          {iframeLogs.map((log, idx) => (
+                            <div key={idx} className="font-mono text-[11px] text-rose-300 break-all">{log}</div>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -3247,6 +2952,9 @@ function App() {
           <span>Açık Kaynak Kodlu © 2026 Devatek | UNI XML&amp;XSLT</span>
         </div>
       </footer>
+
+      {/* Toast Notifications Container */}
+      <ToastContainer />
     </div>
   )
 }

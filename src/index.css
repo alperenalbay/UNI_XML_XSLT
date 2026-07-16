@@ -1,4 +1,264 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
+
+/* -------------------------------------------------------------
+   5 PREMIUM ZEN THEMES (Linear, Vercel, Forest, Stripe, Notion)
+   ------------------------------------------------------------- */
+
+/* Theme 1: Linear Dark (Linear-inspired premium slate-indigo dark UI) */
+.theme-linear {
+  --bg-main: #0b0a11;
+  --bg-panel: #13121f;
+  --bg-panel-hover: #1b1a2d;
+  --border-subtle: rgba(95, 87, 255, 0.16);
+  --color-accent: #5f57ff;
+  --color-accent-hover: #483dff;
+  --text-primary: #f7f7f9;
+  --text-secondary: #8a8895;
+  --color-error: #f87171;
+  --color-warning: #fbbf24;
+  color-scheme: dark;
+}
+
+/* Theme 2: Vercel Obsidian (Vercel-inspired pure pitch black & crisp white borders) */
+.theme-vercel {
+  --bg-main: #000000;
+  --bg-panel: #0a0a0a;
+  --bg-panel-hover: #161616;
+  --border-subtle: #222222;
+  --color-accent: #ffffff;
+  --color-accent-hover: #e6e6e6;
+  --text-primary: #ffffff;
+  --text-secondary: #888888;
+  --color-error: #f87171;
+  --color-warning: #fbbf24;
+  color-scheme: dark;
+}
+
+/* Theme 3: Kyoto Forest (Moss-inspired dark organic green theme) */
+.theme-forest {
+  --bg-main: #080c0a;
+  --bg-panel: #0f1613;
+  --bg-panel-hover: #17221d;
+  --border-subtle: rgba(16, 185, 129, 0.18);
+  --color-accent: #10b981;
+  --color-accent-hover: #059669;
+  --text-primary: #ecfdf5;
+  --text-secondary: #809c91;
+  --color-error: #f87171;
+  --color-warning: #fbbf24;
+  color-scheme: dark;
+}
+
+/* Theme 4: Stripe Clean (Stripe-inspired vibrant crisp light UI) */
+.theme-stripe {
+  --bg-main: #f6f9fc;
+  --bg-panel: #ffffff;
+  --bg-panel-hover: #f1f3f9;
+  --border-subtle: #e3e8ee;
+  --color-accent: #635bff;
+  --color-accent-hover: #0a2540;
+  --text-primary: #0a2540;
+  --text-secondary: #4f566b;
+  --color-error: #d32f2f;
+  --color-warning: #f57c00;
+  color-scheme: light;
+}
+
+/* Theme 5: Notion Milk (Notion-inspired warm paper/tatami light UI) */
+.theme-notion {
+  --bg-main: #fcfbfa;
+  --bg-panel: #f7f6f3;
+  --bg-panel-hover: #efeee9;
+  --border-subtle: #e9e8e4;
+  --color-accent: #df562c;
+  --color-accent-hover: #b8431e;
+  --text-primary: #37352f;
+  --text-secondary: #7c7b77;
+  --color-error: #d32f2f;
+  --color-warning: #b45309;
+  color-scheme: light;
+}
+
+/* -------------------------------------------------------------
+   ZEN STYLING BRIDGES
+   Deeply overrides hardcoded slate/dark classes inside the themes.
+   ------------------------------------------------------------- */
+.theme-linear,
+.theme-vercel,
+.theme-forest,
+.theme-stripe,
+.theme-notion {
+  
+  /* Background overrides */
+  &.bg-zen-main,
+  & .bg-slate-950,
+  & .bg-slate-950\/50,
+  & .bg-slate-950\/80,
+  & .bg-slate-950\/90 {
+    background-color: var(--bg-main) !important;
+  }
+
+  &.bg-zen-panel,
+  & .bg-slate-900,
+  & .bg-slate-900\/40,
+  & .bg-slate-900\/50,
+  & .bg-slate-900\/60,
+  & .bg-slate-900\/80 {
+    background-color: var(--bg-panel) !important;
+  }
+
+  & .bg-slate-900\/20,
+  & .bg-indigo-600\/10,
+  & .bg-indigo-950\/80,
+  & .bg-indigo-950\/85 {
+    background-color: var(--bg-panel-hover) !important;
+  }
+
+  /* Specific designer & tab button overrides */
+  & .bg-slate-800,
+  & .bg-slate-805 {
+    background-color: var(--bg-panel-hover) !important;
+    color: var(--text-primary) !important;
+  }
+
+  & .bg-indigo-950 {
+    background-color: rgba(99, 91, 255, 0.08) !important;
+  }
+
+  & .bg-emerald-950 {
+    background-color: rgba(16, 185, 129, 0.08) !important;
+  }
+
+  & .bg-rose-950\/50,
+  & .bg-rose-950 {
+    background-color: rgba(239, 68, 68, 0.08) !important;
+  }
+
+  /* Error and warning banners background override */
+  & .bg-rose-950\/40 {
+    background-color: rgba(239, 68, 68, 0.06) !important;
+    border-color: var(--color-error) !important;
+  }
+
+  & .bg-emerald-950\/50 {
+    background-color: rgba(16, 185, 129, 0.06) !important;
+    border-color: var(--color-accent) !important;
+  }
+
+  /* Border overrides */
+  & .border-slate-900,
+  & .border-slate-800,
+  & .border-slate-805,
+  & .border-slate-850,
+  & .border-slate-900\/50,
+  & .border-indigo-500\/20,
+  & .border-indigo-500\/30,
+  & .border-indigo-900\/60,
+  & .border-emerald-900\/60,
+  & .border-rose-900\/50,
+  & .border-rose-900,
+  & .border-emerald-900,
+  & .border-slate-800\/60,
+  & .border-zen-subtle {
+    border-color: var(--border-subtle) !important;
+  }
+
+  /* Primary text overrides */
+  &.text-zen-primary,
+  & .text-slate-100,
+  & .text-slate-200,
+  & .text-white {
+    color: var(--text-primary) !important;
+  }
+
+  /* Secondary text overrides */
+  &.text-zen-secondary,
+  & .text-slate-300,
+  & .text-slate-400,
+  & .text-slate-500 {
+    color: var(--text-secondary) !important;
+  }
+
+  /* Transparent text / Gradient text override for light themes */
+  & .text-transparent {
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+    background-image: none !important;
+    color: var(--text-primary) !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
+  }
+
+  /* Color accent overrides */
+  & .text-indigo-400,
+  & .text-indigo-300,
+  & .text-purple-400,
+  & .text-emerald-400,
+  & .text-blue-400 {
+    color: var(--color-accent) !important;
+  }
+
+  & .text-rose-400,
+  & .text-rose-300,
+  & .text-red-400 {
+    color: var(--color-error) !important;
+  }
+
+  & .text-amber-400,
+  & .text-amber-500,
+  & .text-yellow-400 {
+    color: var(--color-warning) !important;
+  }
+
+  /* Hover text overrides to prevent white text on light backgrounds */
+  & .hover\:text-white:hover,
+  & .hover\:text-slate-200:hover,
+  & .hover\:text-slate-100:hover {
+    color: var(--text-primary) !important;
+  }
+
+  & .hover\:text-indigo-300:hover,
+  & .hover\:text-indigo-400:hover {
+    color: var(--color-accent-hover) !important;
+  }
+
+  /* Primary action buttons background */
+  & .bg-indigo-600,
+  & .bg-purple-600,
+  & .bg-blue-600,
+  & .bg-emerald-600 {
+    background-color: var(--color-accent) !important;
+    color: var(--bg-main) !important;
+  }
+
+  & .bg-indigo-600:hover,
+  & .bg-purple-600:hover,
+  & .bg-blue-600:hover,
+  & .bg-emerald-600:hover,
+  & .bg-indigo-500:hover {
+    background-color: var(--color-accent-hover) !important;
+  }
+
+  /* Monaco Editor custom elements background override */
+  & .monaco-editor,
+  & .monaco-editor .margin,
+  & .monaco-editor-background {
+    background-color: var(--bg-panel) !important;
+  }
+}
+
+/* -------------------------------------------------------------
+   SKELETON BASE LAYOUT & FONTS
+   ------------------------------------------------------------- */
+body {
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+/* Ensure invoice preview canvas inside iframe is ALWAYS white for standard readability */
+iframe {
+  background-color: #ffffff !important;
+}
 
 /* Custom premium range slider styling for inputs */
 input[type="range"] {
@@ -10,17 +270,17 @@ input[type="range"] {
 
 /* Track styling */
 input[type="range"]::-webkit-slider-runnable-track {
-  background: #334155; /* slate-700 (high contrast against slate-950) */
+  background: var(--bg-main);
   height: 6px;
   border-radius: 9999px;
-  border: 1px solid #475569; /* slate-600 border for crisp outline */
+  border: 1px solid var(--border-subtle);
 }
 
 input[type="range"]::-moz-range-track {
-  background: #334155;
+  background: var(--bg-main);
   height: 6px;
   border-radius: 9999px;
-  border: 1px solid #475569;
+  border: 1px solid var(--border-subtle);
 }
 
 /* Thumb styling */
@@ -28,45 +288,31 @@ input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   margin-top: -5px; /* Centers thumb on the track */
-  background-color: #6366f1; /* indigo-500 */
+  background-color: var(--color-accent);
   height: 16px;
   width: 16px;
   border-radius: 50%;
-  border: 2px solid #ffffff; /* crisp white border */
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.5);
+  border: 2px solid var(--text-primary);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);
   transition: transform 0.1s ease, background-color 0.1s ease;
 }
 
 input[type="range"]:hover::-webkit-slider-thumb {
   transform: scale(1.15);
-  background-color: #4f46e5; /* indigo-600 */
+  background-color: var(--color-accent-hover);
 }
 
 input[type="range"]::-moz-range-thumb {
-  background-color: #6366f1;
+  background-color: var(--color-accent);
   height: 16px;
   width: 16px;
   border-radius: 50%;
-  border: 2px solid #ffffff;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.5);
+  border: 2px solid var(--text-primary);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);
   transition: transform 0.1s ease, background-color 0.1s ease;
 }
 
 input[type="range"]:hover::-moz-range-thumb {
   transform: scale(1.15);
-  background-color: #4f46e5;
-}
-
-/* Specific styling for rose-accented sliders (like watermark stamp controls) */
-input[type="range"].accent-rose-500::-webkit-slider-thumb {
-  background-color: #f43f5e; /* rose-500 */
-}
-input[type="range"].accent-rose-500:hover::-webkit-slider-thumb {
-  background-color: #e11d48; /* rose-600 */
-}
-input[type="range"].accent-rose-500::-moz-range-thumb {
-  background-color: #f43f5e;
-}
-input[type="range"].accent-rose-500:hover::-moz-range-thumb {
-  background-color: #e11d48;
+  background-color: var(--color-accent-hover);
 }

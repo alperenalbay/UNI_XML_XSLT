@@ -78,7 +78,67 @@ export function transformXmlWithXslt(xmlString: string, xsltString: string): Tra
       }
 
       const serializer = new XMLSerializer();
-      const htmlString = serializer.serializeToString(transformedDoc);
+      let htmlString = serializer.serializeToString(transformedDoc);
+      
+      // Clean up unescaped CDATA blocks and HTML entities in <script> tags for HTML browser compatibility
+      htmlString = htmlString.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (match, scriptContent) => {
+        let cleaned = scriptContent;
+        // Decode HTML entities that might have been escaped by XMLSerializer
+        cleaned = cleaned.replace(/&amp;/g, '&');
+        cleaned = cleaned.replace(/&lt;/g, '<');
+        cleaned = cleaned.replace(/&gt;/g, '>');
+        cleaned = cleaned.replace(/&quot;/g, '"');
+        cleaned = cleaned.replace(/&apos;/g, "'");
+        
+        // Comment out CDATA blocks (both unescaped and escaped variations)
+        cleaned = cleaned.replace(/(?:<!\[CDATA\[|&lt;!\[CDATA\[)/gi, '/*<![CDATA[*/');
+        cleaned = cleaned.replace(/(?:\]\]>|\]\]&gt;)/gi, '/*]]>*/');
+        
+        return match.replace(scriptContent, cleaned);
+      });
+      
+      // Expand self-closing HTML tags (like <div ... />) to prevent browser DOM hierarchy corruption
+      htmlString = htmlString.replace(/<([^>]*?)\/>/g, (match, tagContent) => {
+        const tagNameMatch = tagContent.match(/^([a-zA-Z0-9:-]+)/);
+        if (tagNameMatch) {
+          const tagName = tagNameMatch[1].toLowerCase();
+          const voidElements = ['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'];
+          if (!voidElements.includes(tagName)) {
+            return `<${tagContent}></${tagNameMatch[1]}>`;
+          }
+        }
+        return match;
+      });
+
+      // Inject early iframe error reporting script at the top of <head>
+      const errorHandlerScript = `
+<script>
+  window.onerror = function(message, source, lineno, colno) {
+    window.parent.postMessage({
+      source: 'iframe-error',
+      message: message,
+      lineno: lineno,
+      colno: colno
+    }, '*');
+    return false;
+  };
+  (function() {
+    const originalConsoleError = window.console.error;
+    window.console.error = function() {
+      window.parent.postMessage({
+        source: 'iframe-console-error',
+        args: Array.prototype.slice.call(arguments).map(function(a) {
+          return typeof a === 'object' ? JSON.stringify(a) : String(a);
+        })
+      }, '*');
+      if (originalConsoleError) {
+        originalConsoleError.apply(window.console, arguments);
+      }
+    };
+  })();
+</script>
+`;
+      htmlString = htmlString.replace(/<head\b[^>]*>/i, (match) => match + errorHandlerScript);
       
       return { html: htmlString };
     } catch (transformErr: any) {
@@ -346,7 +406,12 @@ export function updateElementStyleInXsltById(
 
       // Update or add the property
       if (value) {
-        stylesMap[property.toLowerCase()] = value;
+        let finalValue = value.trim();
+        const importantProps = ['color', 'margin', 'padding', 'font-size', 'width', 'text-align', 'font-weight', 'font-style', 'text-decoration'];
+        if (importantProps.includes(property.toLowerCase()) && !finalValue.toLowerCase().includes('!important')) {
+          finalValue = `${finalValue} !important`;
+        }
+        stylesMap[property.toLowerCase()] = finalValue;
       } else {
         delete stylesMap[property.toLowerCase()];
       }
@@ -576,8 +641,13 @@ export function updateWatermarkTextInXslt(xsltCode: string, newText: string): st
 /**
  * XSLT içerisine yeni bir metin alanı ekler ve onun için CSS kuralı tanımlar.
  */
-export function addElementToXslt(xsltCode: string, parentClassName: string, text: string): string {
-  if (!xsltCode.trim() || !parentClassName) return xsltCode;
+export function addElementToXslt(
+  xsltCode: string, 
+  parentSelector: string, 
+  text: string,
+  details?: { xsltId?: string }
+): string {
+  if (!xsltCode.trim()) return xsltCode;
 
   try {
     const parser = new DOMParser();
@@ -588,22 +658,97 @@ export function addElementToXslt(xsltCode: string, parentClassName: string, text
       return xsltCode;
     }
 
-    const findElementByClass = (root: Node, clsName: string): Element | null => {
-      if (root.nodeType === Node.ELEMENT_NODE) {
-        const el = root as Element;
-        const cls = el.getAttribute('class') || '';
-        if (cls.split(/\s+/).includes(clsName)) {
-          return el;
-        }
-      }
-      for (let i = 0; i < root.childNodes.length; i++) {
-        const found = findElementByClass(root.childNodes[i], clsName);
-        if (found) return found;
-      }
-      return null;
-    };
+    let parentEl: Element | null = null;
 
-    const parentEl = findElementByClass(doc.documentElement, parentClassName);
+    // 1. Try to find parent by unique temporary XSLT ID if details is provided
+    if (details && details.xsltId) {
+      let xsltIdCounter = 1;
+      const injectXsltIds = (node: Node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const element = node as Element;
+          if (element.namespaceURI !== 'http://www.w3.org/1999/XSL/Transform') {
+            element.setAttribute('data-xslt-id', String(xsltIdCounter++));
+          }
+        }
+        for (let i = 0; i < node.childNodes.length; i++) {
+          injectXsltIds(node.childNodes[i]);
+        }
+      };
+      if (doc.documentElement) {
+        injectXsltIds(doc.documentElement);
+      }
+
+      const idToFind = String(details.xsltId);
+      const findElementByXsltId = (root: Node): Element | null => {
+        if (root.nodeType === Node.ELEMENT_NODE) {
+          const element = root as Element;
+          if (element.getAttribute('data-xslt-id') === idToFind) {
+            return element;
+          }
+        }
+        for (let i = 0; i < root.childNodes.length; i++) {
+          const found = findElementByXsltId(root.childNodes[i]);
+          if (found) return found;
+        }
+        return null;
+      };
+      parentEl = findElementByXsltId(doc.documentElement);
+    }
+
+    // 2. Fallback to selector matching if not found by XSLT ID
+    if (!parentEl && parentSelector) {
+      if (parentSelector.startsWith('#')) {
+        const idToFind = parentSelector.substring(1);
+        const findElementById = (root: Node): Element | null => {
+          if (root.nodeType === Node.ELEMENT_NODE) {
+            const element = root as Element;
+            if (element.getAttribute('id') === idToFind) {
+              return element;
+            }
+          }
+          for (let i = 0; i < root.childNodes.length; i++) {
+            const found = findElementById(root.childNodes[i]);
+            if (found) return found;
+          }
+          return null;
+        };
+        parentEl = findElementById(doc.documentElement);
+      } else if (parentSelector.startsWith('.')) {
+        const classToFind = parentSelector.substring(1);
+        const findElementByClass = (root: Node): Element | null => {
+          if (root.nodeType === Node.ELEMENT_NODE) {
+            const element = root as Element;
+            const cls = element.getAttribute('class') || '';
+            if (cls.split(/\s+/).includes(classToFind)) {
+              return element;
+            }
+          }
+          for (let i = 0; i < root.childNodes.length; i++) {
+            const found = findElementByClass(root.childNodes[i]);
+            if (found) return found;
+          }
+          return null;
+        };
+        parentEl = findElementByClass(doc.documentElement);
+      } else {
+        const tagToFind = parentSelector.toLowerCase();
+        const findElementByTag = (root: Node): Element | null => {
+          if (root.nodeType === Node.ELEMENT_NODE) {
+            const element = root as Element;
+            if (element.tagName.toLowerCase() === tagToFind) {
+              return element;
+            }
+          }
+          for (let i = 0; i < root.childNodes.length; i++) {
+            const found = findElementByTag(root.childNodes[i]);
+            if (found) return found;
+          }
+          return null;
+        };
+        parentEl = findElementByTag(doc.documentElement);
+      }
+    }
+
     if (parentEl) {
       const uniqueId = Date.now();
       const newClassName = `custom-text-${uniqueId}`;
@@ -614,6 +759,19 @@ export function addElementToXslt(xsltCode: string, parentClassName: string, text
       newDiv.textContent = text;
       
       parentEl.appendChild(newDiv);
+
+      // Clean up temporary IDs
+      const removeXsltIds = (node: Node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          (node as Element).removeAttribute('data-xslt-id');
+        }
+        for (let i = 0; i < node.childNodes.length; i++) {
+          removeXsltIds(node.childNodes[i]);
+        }
+      };
+      if (doc.documentElement) {
+        removeXsltIds(doc.documentElement);
+      }
       
       let serialized = new XMLSerializer().serializeToString(doc);
 
@@ -720,59 +878,59 @@ export function removeElementFromXslt(xsltCode: string, selector: string, detail
       el = findExactElement(doc.documentElement);
     }
 
-    // 2. Fallback to selector matching if exact match not found
-    if (!el) {
+    // 3. Fallback to selector matching if exact match not found AND no xsltId was provided
+    if (!el && (!details || !details.xsltId)) {
       if (selector.startsWith('#')) {
-      const idToFind = selector.substring(1);
-      const findElementById = (root: Node): Element | null => {
-        if (root.nodeType === Node.ELEMENT_NODE) {
-          const element = root as Element;
-          if (element.getAttribute('id') === idToFind) {
-            return element;
+        const idToFind = selector.substring(1);
+        const findElementById = (root: Node): Element | null => {
+          if (root.nodeType === Node.ELEMENT_NODE) {
+            const element = root as Element;
+            if (element.getAttribute('id') === idToFind) {
+              return element;
+            }
           }
-        }
-        for (let i = 0; i < root.childNodes.length; i++) {
-          const found = findElementById(root.childNodes[i]);
-          if (found) return found;
-        }
-        return null;
-      };
-      el = findElementById(doc.documentElement);
-    } else if (selector.startsWith('.')) {
-      const classToFind = selector.substring(1);
-      const findElementByClass = (root: Node): Element | null => {
-        if (root.nodeType === Node.ELEMENT_NODE) {
-          const element = root as Element;
-          const cls = element.getAttribute('class') || '';
-          if (cls.split(/\s+/).includes(classToFind)) {
-            return element;
+          for (let i = 0; i < root.childNodes.length; i++) {
+            const found = findElementById(root.childNodes[i]);
+            if (found) return found;
           }
-        }
-        for (let i = 0; i < root.childNodes.length; i++) {
-          const found = findElementByClass(root.childNodes[i]);
-          if (found) return found;
-        }
-        return null;
-      };
-      el = findElementByClass(doc.documentElement);
-    } else {
-      const tagToFind = selector.toLowerCase();
-      const findElementByTag = (root: Node): Element | null => {
-        if (root.nodeType === Node.ELEMENT_NODE) {
-          const element = root as Element;
-          if (element.tagName.toLowerCase() === tagToFind) {
-            return element;
+          return null;
+        };
+        el = findElementById(doc.documentElement);
+      } else if (selector.startsWith('.')) {
+        const classToFind = selector.substring(1);
+        const findElementByClass = (root: Node): Element | null => {
+          if (root.nodeType === Node.ELEMENT_NODE) {
+            const element = root as Element;
+            const cls = element.getAttribute('class') || '';
+            if (cls.split(/\s+/).includes(classToFind)) {
+              return element;
+            }
           }
-        }
-        for (let i = 0; i < root.childNodes.length; i++) {
-          const found = findElementByTag(root.childNodes[i]);
-          if (found) return found;
-        }
-        return null;
-      };
-      el = findElementByTag(doc.documentElement);
+          for (let i = 0; i < root.childNodes.length; i++) {
+            const found = findElementByClass(root.childNodes[i]);
+            if (found) return found;
+          }
+          return null;
+        };
+        el = findElementByClass(doc.documentElement);
+      } else {
+        const tagToFind = selector.toLowerCase();
+        const findElementByTag = (root: Node): Element | null => {
+          if (root.nodeType === Node.ELEMENT_NODE) {
+            const element = root as Element;
+            if (element.tagName.toLowerCase() === tagToFind) {
+              return element;
+            }
+          }
+          for (let i = 0; i < root.childNodes.length; i++) {
+            const found = findElementByTag(root.childNodes[i]);
+            if (found) return found;
+          }
+          return null;
+        };
+        el = findElementByTag(doc.documentElement);
+      }
     }
-  }
 
     if (el && el.parentNode) {
       el.parentNode.removeChild(el);
