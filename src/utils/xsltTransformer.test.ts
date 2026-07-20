@@ -5,6 +5,7 @@ import {
   removeEmbeddedXslt,
   addElementToXslt,
   removeElementFromXslt,
+  updateXsltTagAtLine,
 } from './xsltTransformer';
 
 describe('xsltTransformer', () => {
@@ -156,6 +157,79 @@ describe('xsltTransformer', () => {
     it('should not fall back to class if xsltId is provided but not matched', () => {
       const result = removeElementFromXslt(xslt, '.other-class', { xsltId: '999' });
       expect(result).toContain('Item 2');
+    });
+  });
+
+  describe('updateXsltTagAtLine', () => {
+    it('should wrap single-line element with nobr when nowrap is enabled', () => {
+      const code = '<span>Hello</span>';
+      const result = updateXsltTagAtLine(code, 1, 'white-space', 'nowrap');
+      expect(result).toBe('<span style="white-space: nowrap !important;"><nobr>Hello</nobr></span>');
+    });
+
+    it('should unwrap single-line element with nobr when nowrap is disabled', () => {
+      const code = '<span><nobr>Hello</nobr></span>';
+      const result = updateXsltTagAtLine(code, 1, 'white-space', 'normal');
+      expect(result).toBe('<span style="white-space: normal !important;">Hello</span>');
+    });
+
+    it('should wrap multi-line element with nobr and matching closing tag', () => {
+      const code = `<span>
+  <xsl:text>Hello</xsl:text>
+</span>`;
+      const result = updateXsltTagAtLine(code, 1, 'white-space', 'nowrap');
+      const expected = `<span style="white-space: nowrap !important;"><nobr>
+  <xsl:text>Hello</xsl:text>
+</nobr></span>`;
+      expect(result).toBe(expected);
+    });
+
+    it('should unwrap multi-line element correctly', () => {
+      const code = `<span><nobr>
+  <xsl:text>Hello</xsl:text>
+</nobr></span>`;
+      const result = updateXsltTagAtLine(code, 1, 'white-space', 'normal');
+      const expected = `<span style="white-space: normal !important;">
+  <xsl:text>Hello</xsl:text>
+</span>`;
+      expect(result).toBe(expected);
+    });
+
+    it('should redirect update from xsl:text to its parent HTML tag', () => {
+      const code = `<span>
+  <xsl:text>Hello</xsl:text>
+</span>`;
+      const result = updateXsltTagAtLine(code, 2, 'white-space', 'nowrap');
+      const expected = `<span style="white-space: nowrap !important;"><nobr>
+  <xsl:text>Hello</xsl:text>
+</nobr></span>`;
+      expect(result).toBe(expected);
+    });
+
+    it('should update style attribute on a single-line tag', () => {
+      const code = '<div style="color: red;">Hello</div>';
+      const result = updateXsltTagAtLine(code, 1, 'color', 'blue');
+      expect(result).toBe('<div style="color: blue !important;">Hello</div>');
+    });
+
+    it('should update style attribute on a multiline start tag', () => {
+      const code = `<div
+  class="my-div"
+  style="color: red;"
+>
+  Hello
+</div>`;
+      const result = updateXsltTagAtLine(code, 1, 'text-align', 'center');
+      // The updated tag will be serialized on a single line where it was replaced, which is fine
+      expect(result).toBe(`<div class="my-div" style="color: red; text-align: center !important;">
+  Hello
+</div>`);
+    });
+
+    it('should update width attribute and width inside style attribute', () => {
+      const code = '<col width="10%"/>';
+      const result = updateXsltTagAtLine(code, 1, 'width', '20%');
+      expect(result).toBe('<col width="20%" style="width: 20% !important;"/>');
     });
   });
 });

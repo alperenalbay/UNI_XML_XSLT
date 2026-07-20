@@ -37,11 +37,14 @@ import {
   updateElementTextInXsltById,
   updateElementStyleInXsltById,
   addElementToXslt,
-  removeElementFromXslt
+  removeElementFromXslt,
+  updateXsltTagAtLine,
+  findLineByXsltId
 } from './utils/xsltTransformer'
 import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 import { ToastContainer, useToast } from './components'
 import { useEditorStore } from './store/editorStore'
+import { useFileOps } from './hooks'
 
 
 function App() {
@@ -58,7 +61,7 @@ function App() {
     previewActiveTab, setPreviewActiveTab,
     editorLayout, setEditorLayout,
     autoRefresh, setAutoRefresh,
-    isCopied, setIsCopied,
+    isCopied,
     validationStatus, setValidationStatus,
     iframeLogs, setIframeLogs,
     zoomPercent, setZoomPercent,
@@ -84,6 +87,7 @@ function App() {
   const [selectedSelector, setSelectedSelector] = useState<string>('')
   const [selectedElementName, setSelectedElementName] = useState<string>('')
   const [selectedElementDetails, setSelectedElementDetails] = useState<any>(null)
+  const [showTableBorders, setShowTableBorders] = useState<boolean>(false)
 
   // CSS values for Selected Element
   const [styleMargin, setStyleMargin] = useState<string>('')
@@ -97,6 +101,9 @@ function App() {
   const [styleFontWeight, setStyleFontWeight] = useState<string>('')
   const [styleFontStyle, setStyleFontStyle] = useState<string>('')
   const [styleTextDecoration, setStyleTextDecoration] = useState<string>('')
+  const [styleWhiteSpace, setStyleWhiteSpace] = useState<string>('normal')
+  const [widthUnit, setWidthUnit] = useState<string>('%')
+  const [selectedLineNumber, setSelectedLineNumber] = useState<number>(0)
 
   const loadCustomTemplates = async () => {
     try {
@@ -442,8 +449,22 @@ function App() {
       rawHtml = rawHtml.replace('</head>', `${printStyleBlock}</head>`);
       
       let styleRules = '';
+      let scriptCode = '';
       if (inspectorActive) {
         styleRules = `
+          body {
+            width: 210mm !important;
+            min-height: 297mm !important;
+            margin: 24px auto !important;
+            padding: 10px !important;
+            background-color: #ffffff !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4) !important;
+            box-sizing: border-box !important;
+          }
+          table, div {
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+          }
           *:not(html):not(body):hover {
             outline: 2px dashed #3b82f6 !important;
             outline-offset: -2px !important;
@@ -452,6 +473,19 @@ function App() {
         `;
       } else if (designerActive) {
         styleRules = `
+          body {
+            width: 210mm !important;
+            min-height: 297mm !important;
+            margin: 24px auto !important;
+            padding: 10px !important;
+            background-color: #ffffff !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4) !important;
+            box-sizing: border-box !important;
+          }
+          table, div {
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+          }
           *:not(html):not(body):hover {
             outline: 2px dashed #a855f7 !important;
             outline-offset: -2px !important;
@@ -468,15 +502,203 @@ function App() {
             50% { box-shadow: 0 0 0 6px rgba(168, 85, 247, 0.3), 0 0 16px rgba(168, 85, 247, 0.8) !important; }
             100% { box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2), 0 0 6px rgba(168, 85, 247, 0.4) !important; }
           }
+          .uni-col-resizer {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 6px;
+            cursor: col-resize;
+            user-select: none;
+            height: 100%;
+            z-index: 1000;
+            transition: background-color 0.15s;
+          }
+          .uni-col-resizer:hover, .uni-col-resizer.resizing {
+            background-color: #a855f7 !important;
+            width: 6px !important;
+          }
+          ${showTableBorders ? `
+            table, tr, td, th {
+              outline: 1px dashed rgba(168, 85, 247, 0.4) !important;
+              outline-offset: -1px !important;
+            }
+            .uni-col-resizer {
+              background-color: rgba(168, 85, 247, 0.35) !important;
+              width: 4px !important;
+            }
+          ` : ''}
         `;
+        
+        scriptCode = `
+<script id="uni-designer-resizer">
+(function() {
+  function getCellAtColumnIndex(row, targetColIndex) {
+    let currentColIndex = 0;
+    const children = row.children;
+    for (let j = 0; j < children.length; j++) {
+      const rCell = children[j];
+      if (rCell.tagName.toLowerCase() === 'col' || rCell.tagName.toLowerCase() === 'colgroup') continue;
+      const colspan = parseInt(rCell.getAttribute('colspan')) || 1;
+      if (currentColIndex === targetColIndex) {
+        return rCell;
+      }
+      if (targetColIndex >= currentColIndex && targetColIndex < currentColIndex + colspan) {
+        return rCell;
+      }
+      currentColIndex += colspan;
+    }
+    return null;
+  }
+
+  function initResizers() {
+    const tables = document.querySelectorAll('table');
+    tables.forEach(table => {
+      if (table.getAttribute('data-uni-resizable')) return;
+      table.setAttribute('data-uni-resizable', 'true');
+      
+      if (!table.style.width && !table.getAttribute('width')) {
+        table.style.width = '100%';
+      }
+      table.style.tableLayout = 'fixed';
+
+      const rows = table.querySelectorAll('tr');
+      let targetRow = null;
+      let maxCells = 0;
+      rows.forEach(row => {
+        const cellCount = row.children.length;
+        if (cellCount > maxCells) {
+          maxCells = cellCount;
+          targetRow = row;
+        }
+      });
+      if (!targetRow) return;
+      const cells = targetRow.children;
+      if (!cells || cells.length === 0) return;
+
+      for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i];
+        if (cell.tagName.toLowerCase() === 'col' || cell.tagName.toLowerCase() === 'colgroup') continue;
+        
+        cell.style.position = 'relative';
+
+        const resizer = document.createElement('div');
+        resizer.className = 'uni-col-resizer';
+        cell.appendChild(resizer);
+
+        let pageX = 0;
+        let curCellWidth = 0;
+        let tableWidth = 0;
+        
+        // Calculate the grid column index for this cell
+        let colIndex = 0;
+        for (let j = 0; j < i; j++) {
+          colIndex += parseInt(cells[j].getAttribute('colspan')) || 1;
+        }
+
+        resizer.addEventListener('mousedown', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          resizer.classList.add('resizing');
+          pageX = e.pageX;
+          curCellWidth = cell.offsetWidth;
+          tableWidth = table.offsetWidth || 800;
+          
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
+        });
+
+        function onMouseMove(e) {
+          const diffX = e.pageX - pageX;
+          const newWidthPx = Math.max(25, curCellWidth + diffX);
+          const tWidth = tableWidth || 1;
+          const pct = Math.min(99, Math.max(1, Math.round((newWidthPx / tWidth) * 100)));
+          
+          const colGroup = table.querySelector('colgroup');
+          let updated = false;
+          if (colGroup) {
+            const cols = colGroup.querySelectorAll('col');
+            if (cols && cols[colIndex]) {
+              cols[colIndex].style.width = pct + '%';
+              cols[colIndex].setAttribute('width', pct + '%');
+              updated = true;
+            }
+          }
+          if (!updated) {
+            const trs = table.querySelectorAll('tr');
+            trs.forEach(row => {
+              const cellAtCol = getCellAtColumnIndex(row, colIndex);
+              if (cellAtCol) {
+                cellAtCol.style.width = pct + '%';
+                cellAtCol.setAttribute('width', pct + '%');
+              }
+            });
+          }
+        }
+
+        function onMouseUp(e) {
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+          resizer.classList.remove('resizing');
+          
+          const diffX = e.pageX - pageX;
+          const newWidthPx = Math.max(25, curCellWidth + diffX);
+          const tWidth = tableWidth || 1;
+          const pct = Math.min(99, Math.max(1, Math.round((newWidthPx / tWidth) * 100)));
+          
+          const colGroup = table.querySelector('colgroup');
+          let targetElement = cell;
+          if (colGroup) {
+            const cols = colGroup.querySelectorAll('col');
+            if (cols && cols[colIndex]) {
+              targetElement = cols[colIndex];
+            }
+          }
+
+          const xsltId = targetElement.getAttribute('data-xslt-id');
+          if (xsltId) {
+            const cellIds = [];
+            if (!colGroup) {
+              const trs = table.querySelectorAll('tr');
+              trs.forEach(row => {
+                const cellAtCol = getCellAtColumnIndex(row, colIndex);
+                if (cellAtCol && cellAtCol.getAttribute('data-xslt-id')) {
+                  cellIds.push(cellAtCol.getAttribute('data-xslt-id'));
+                }
+              });
+            }
+            window.parent.postMessage({
+              source: 'xslt-column-resized',
+              xsltId: xsltId,
+              xsltIds: cellIds,
+              widthPct: pct + '%'
+            }, '*');
+          }
+        }
+      }
+    });
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    initResizers();
+  } else {
+    document.addEventListener('DOMContentLoaded', initResizers);
+  }
+  window.addEventListener('load', initResizers);
+})();
+</script>
+`;
       }
       if (styleRules) {
         const inspectorStyle = `<style id="uni-interactivity-style">${styleRules}</style>`;
         rawHtml = rawHtml.replace('</head>', `${inspectorStyle}</head>`);
       }
+      if (scriptCode) {
+        rawHtml = rawHtml.replace('</head>', `${scriptCode}</head>`);
+      }
     }
     return rawHtml || '<p style="padding: 20px; color: #64748b; font-family: sans-serif; text-align: center;">Dönüştürülmüş fatura görüntüsü burada görüntülenecektir.</p>';
-  }, [htmlOutput, errorMsg, inspectorActive, designerActive])
+  }, [htmlOutput, errorMsg, inspectorActive, designerActive, showTableBorders])
 
   // Attach event listeners and apply layout sizing inside the iframe document on load
   const handleIframeLoad = () => {
@@ -488,6 +710,19 @@ function App() {
     if (iframeWindow) {
       const win = iframeWindow as any;
       setIframeLogs([]);
+
+      try {
+        iframeWindow.addEventListener('message', (event) => {
+          if (event.data && event.data.action === 'select-element-by-id') {
+            const el = innerDoc.querySelector(`[data-xslt-id="${event.data.xsltId}"]`) as HTMLElement;
+            if (el) {
+              el.click();
+            }
+          }
+        });
+      } catch (e) {
+        console.warn("Could not register window message listener inside iframe", e);
+      }
       
       win.onerror = (message: any, _source: any, lineno: any, colno: any) => {
         const errStr = `[Hata] ${message} (${lineno}:${colno})`;
@@ -532,6 +767,29 @@ function App() {
       htmlEl.style.margin = '0'
     }
 
+    // Restore selection styling if a selector is active
+    if (designerActive && (selectedSelector || selectedElementDetails?.xsltId)) {
+      let elToSelect: HTMLElement | null = null;
+      
+      // 1. Try to find by XSLT ID first (most specific/accurate)
+      if (selectedElementDetails?.xsltId) {
+        elToSelect = innerDoc.querySelector(`[data-xslt-id="${selectedElementDetails.xsltId}"]`) as HTMLElement;
+      }
+      
+      // 2. Fallback to CSS selector
+      if (!elToSelect && selectedSelector) {
+        try {
+          elToSelect = innerDoc.querySelector(selectedSelector) as HTMLElement;
+        } catch (e) {
+          console.warn("Could not query selector", selectedSelector, e);
+        }
+      }
+      
+      if (elToSelect) {
+        elToSelect.classList.add('uni-selected-element');
+      }
+    }
+
     // Attach listeners if inspector or designer is active
     if (!errorMsg && (inspectorActive || designerActive)) {
       
@@ -574,8 +832,33 @@ function App() {
           textAlign: target.style.textAlign || computed.textAlign || '',
           fontWeight: target.style.fontWeight || computed.fontWeight || '',
           fontStyle: target.style.fontStyle || computed.fontStyle || '',
-          textDecoration: target.style.textDecoration || computed.textDecoration || ''
+          textDecoration: target.style.textDecoration || computed.textDecoration || '',
+          whiteSpace: target.style.whiteSpace || computed.whiteSpace || ''
         }
+
+        // Check if there is a matching col element
+        let colXsltId = '';
+        let colWidth = '';
+        const cell = target.closest('td, th');
+        if (cell) {
+          const cellIndex = Array.prototype.indexOf.call(cell.parentNode?.children || [], cell);
+          const table = cell.closest('table');
+          if (table && cellIndex !== -1) {
+            const colGroup = table.querySelector('colgroup');
+            if (colGroup) {
+              const cols = colGroup.querySelectorAll('col');
+              if (cols && cols[cellIndex]) {
+                colXsltId = cols[cellIndex].getAttribute('data-xslt-id') || '';
+                const colComputed = win ? win.getComputedStyle(cols[cellIndex]) : {} as any;
+                colWidth = cols[cellIndex].style.width || cols[cellIndex].getAttribute('width') || colComputed.width || '';
+              }
+            }
+          }
+        }
+
+        const cellXsltId = cell ? cell.getAttribute('data-xslt-id') || '' : '';
+        const parentTable = cell ? cell.closest('table') : target.closest('table');
+        const tableXsltId = parentTable ? parentTable.getAttribute('data-xslt-id') || '' : '';
 
         window.parent.postMessage({
           source: designerActive ? 'xslt-designer-click' : 'xslt-preview-inspector',
@@ -587,6 +870,10 @@ function App() {
           targetSrc: target.getAttribute('src') || '',
           targetHref: target.getAttribute('href') || '',
           xsltId: target.getAttribute('data-xslt-id') || '',
+          colXsltId,
+          colWidth,
+          cellXsltId,
+          tableXsltId,
           styles
         }, '*')
       })
@@ -737,7 +1024,7 @@ function App() {
     const handleInspectorMessage = (event: MessageEvent) => {
       if (!event.data) return
 
-      const { source, text, className, tagName, id, original, current, targetTagName, targetSrc, targetHref, xsltId, styles, message, lineno, colno, args } = event.data
+      const { source, text, className, tagName, id, original, current, targetTagName, targetSrc, targetHref, xsltId, colXsltId, colWidth, cellXsltId, tableXsltId, styles, message, lineno, colno, args } = event.data
 
       if (source === 'iframe-error') {
         const errStr = `[Hata] ${message} (${lineno}:${colno})`;
@@ -748,6 +1035,33 @@ function App() {
       if (source === 'iframe-console-error') {
         const errStr = `[Konsol Hatası] ${args.join(' ')}`;
         setIframeLogs(prev => [...prev, errStr]);
+        return;
+      }
+
+      // Case 0: Column resized via drag & drop in iframe preview
+      if (source === 'xslt-column-resized') {
+        const { xsltId: resizedId, xsltIds, widthPct } = event.data;
+        if (resizedId && widthPct) {
+          if (selectedElementDetails?.xsltId === resizedId) {
+            setStyleWidth(widthPct);
+            setWidthUnit('%');
+          }
+          let updated = xsltContent;
+          const idsToUpdate = xsltIds && xsltIds.length > 0 ? xsltIds : [resizedId];
+          idsToUpdate.forEach((id: string) => {
+            const line = findLineByXsltId(updated, id);
+            if (line > 0) {
+              updated = updateXsltTagAtLine(updated, line, 'width', widthPct);
+            } else {
+              updated = updateElementStyleInXsltById(updated, id, 'width', widthPct);
+            }
+          });
+          if (updated !== xsltContent) {
+            updateXsltContent(updated);
+            setInspectorStatus(`Sütun genişliği ayarlandı: ${widthPct}`);
+            setTimeout(() => setInspectorStatus(null), 3000);
+          }
+        }
         return;
       }
 
@@ -769,14 +1083,20 @@ function App() {
       
       // Case 2: Click in Inspector mode (navigates code)
       else if (source === 'xslt-preview-inspector') {
-        const searchTerms = getSearchTerms(id, className, text, tagName)
-        if (searchTerms.length > 0) {
-          const line = findLineInCode(xsltContent, searchTerms)
-          if (line > 1) {
-            jumpToXsltLine(line)
-            setInspectorStatus(`Satır ${line} konumuna odaklanıldı (${text ? `"${text.substring(0, 12)}..."` : className || tagName})`)
-            setTimeout(() => setInspectorStatus(null), 3000)
+        let line = 0
+        if (xsltId) {
+          line = findLineByXsltId(xsltContent, xsltId)
+        }
+        if (line <= 0) {
+          const searchTerms = getSearchTerms(id, className, text, tagName)
+          if (searchTerms.length > 0) {
+            line = findLineInCode(xsltContent, searchTerms)
           }
+        }
+        if (line > 1) {
+          jumpToXsltLine(line)
+          setInspectorStatus(`Satır ${line} konumuna odaklanıldı (${text ? `"${text.substring(0, 12)}..."` : className || tagName})`)
+          setTimeout(() => setInspectorStatus(null), 3000)
         }
       } 
       
@@ -803,7 +1123,7 @@ function App() {
 
         setSelectedSelector(sel)
         setSelectedElementName(elementName)
-        setSelectedElementDetails({ targetTagName, targetSrc, targetHref, xsltId })
+        setSelectedElementDetails({ targetTagName, targetSrc, targetHref, xsltId, colXsltId, cellXsltId: cellXsltId || '', tableXsltId: tableXsltId || '' })
         
         // Extract current CSS property values from XSLT code (Prefer computed styles, fallback to XSLT style block)
         if (styles) {
@@ -811,31 +1131,70 @@ function App() {
           setStylePadding(styles.padding || '')
           setStyleFontSize(styles.fontSize ? styles.fontSize.replace('px', '') : '')
           setStyleColor(rgbToHex(styles.color) || '#000000')
-          setStyleWidth(styles.width || '')
+          
+          // Width & Unit parsing
+          const w = colWidth || styles.width || ''
+          setStyleWidth(w)
+          if (w.includes('%')) {
+            setWidthUnit('%')
+          } else if (w.includes('px')) {
+            setWidthUnit('px')
+          } else if (w === 'auto') {
+            setWidthUnit('auto')
+          } else {
+            setWidthUnit('%')
+          }
+
           setStyleTextAlign(styles.textAlign || 'left')
           setStyleFontWeight(styles.fontWeight || 'normal')
           setStyleFontStyle(styles.fontStyle || 'normal')
           setStyleTextDecoration(styles.textDecoration || 'none')
+          setStyleWhiteSpace(styles.whiteSpace || 'normal')
         } else {
           setStyleMargin(getXsltStyleValue(xsltContent, sel, 'margin') || getXsltStyleValue(xsltContent, sel, 'margin-top') || '')
           setStylePadding(getXsltStyleValue(xsltContent, sel, 'padding') || getXsltStyleValue(xsltContent, sel, 'padding-top') || '')
           setStyleFontSize(getXsltStyleValue(xsltContent, sel, 'font-size') || '')
           setStyleColor(getXsltStyleValue(xsltContent, sel, 'color') || '')
-          setStyleWidth(getXsltStyleValue(xsltContent, sel, 'width') || '')
+          
+          // Width & Unit parsing for XSLT style block fallback
+          const w = getXsltStyleValue(xsltContent, sel, 'width') || ''
+          setStyleWidth(w)
+          if (w.includes('%')) {
+            setWidthUnit('%')
+          } else if (w.includes('px')) {
+            setWidthUnit('px')
+          } else if (w === 'auto') {
+            setWidthUnit('auto')
+          } else {
+            setWidthUnit('%')
+          }
+
           setStyleTextAlign(getXsltStyleValue(xsltContent, sel, 'text-align') || '')
           setStyleFontWeight(getXsltStyleValue(xsltContent, sel, 'font-weight') || '')
           setStyleFontStyle(getXsltStyleValue(xsltContent, sel, 'font-style') || '')
           setStyleTextDecoration(getXsltStyleValue(xsltContent, sel, 'text-decoration') || '')
+          setStyleWhiteSpace(getXsltStyleValue(xsltContent, sel, 'white-space') || 'normal')
         }
 
         // Scroll code editor to element line silently in the background (DO NOT SWITCH TAB!)
-        const searchTerms = getSearchTerms(id, className, text, tagName)
-        if (searchTerms.length > 0) {
-          const line = findLineInCode(xsltContent, searchTerms)
-          if (line > 1 && xsltEditorRef.current) {
+        let line = 0
+        if (xsltId) {
+          line = findLineByXsltId(xsltContent, xsltId)
+        }
+        if (line <= 0) {
+          const searchTerms = getSearchTerms(id, className, text, tagName)
+          if (searchTerms.length > 0) {
+            line = findLineInCode(xsltContent, searchTerms)
+          }
+        }
+        if (line > 1) {
+          setSelectedLineNumber(line)
+          if (xsltEditorRef.current) {
             xsltEditorRef.current.revealLineInCenter(line)
             xsltEditorRef.current.setPosition({ lineNumber: line, column: 1 })
           }
+        } else {
+          setSelectedLineNumber(0)
         }
       }
     }
@@ -916,11 +1275,23 @@ function App() {
     else if (property === 'font-weight') setStyleFontWeight(value)
     else if (property === 'font-style') setStyleFontStyle(value)
     else if (property === 'text-decoration') setStyleTextDecoration(value)
+    else if (property === 'white-space') setStyleWhiteSpace(value)
     
-    // Write style changes back into Monaco editor (Prefer element ID inline style, fallback to style block)
+    // Write style changes back into Monaco editor (Prefer direct line text update, fallback to element ID inline style, fallback to style block)
     let updated = xsltContent
-    if (selectedElementDetails?.xsltId) {
-      updated = updateElementStyleInXsltById(xsltContent, selectedElementDetails.xsltId, property, value)
+    const isWidth = property.toLowerCase() === 'width';
+    const targetId = (isWidth && selectedElementDetails?.colXsltId) ? selectedElementDetails.colXsltId : selectedElementDetails?.xsltId;
+    
+    let targetLine = selectedLineNumber;
+    if (isWidth && selectedElementDetails?.colXsltId) {
+      const colLine = findLineByXsltId(xsltContent, selectedElementDetails.colXsltId);
+      if (colLine > 0) targetLine = colLine;
+    }
+
+    if (targetLine > 0) {
+      updated = updateXsltTagAtLine(xsltContent, targetLine, property, value)
+    } else if (targetId) {
+      updated = updateElementStyleInXsltById(xsltContent, targetId, property, value)
     } else if (selectedSelector) {
       updated = updateXsltStyle(xsltContent, selectedSelector, property, value)
     }
@@ -949,6 +1320,7 @@ function App() {
       updateXsltContent(updated)
       setSelectedSelector('')
       setSelectedElementDetails(null)
+      setSelectedLineNumber(0)
       setInspectorStatus("Seçilen eleman tasarımdan silindi.")
       setTimeout(() => setInspectorStatus(null), 3000)
     }
@@ -1068,98 +1440,19 @@ function App() {
     }
   }
 
-  // Upload Handler
-  const handleFileUploadWrapper = (e: React.ChangeEvent<HTMLInputElement>, type: 'xml' | 'xslt') => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const content = event.target?.result as string
-      if (type === 'xml') {
-        updateXmlContent(content)
-      } else {
-        updateXsltContent(content)
-      }
-    }
-    reader.readAsText(file)
-  }
-
-  // Drag and Drop Event Handlers
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(true)
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.currentTarget === e.target) {
-      setIsDragging(false)
-    }
-  }
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
-    
-    const files = e.dataTransfer.files
-    if (files && files.length > 0) {
-      Array.from(files).forEach(file => {
-        const reader = new FileReader()
-        reader.onload = (event) => {
-          const content = event.target?.result as string
-          if (file.name.endsWith('.xml')) {
-            updateXmlContent(content)
-            setEditorActiveTab('xml')
-          } else if (file.name.endsWith('.xslt') || file.name.endsWith('.xsl')) {
-            updateXsltContent(content)
-            setEditorActiveTab('xslt')
-          }
-        }
-        reader.readAsText(file)
-      })
-    }
-  }
-
-  // Actions
-  const handleCopyHtml = () => {
-    navigator.clipboard.writeText(htmlOutput)
-    setIsCopied(true)
-    setTimeout(() => setIsCopied(false), 2000)
-  }
-
-  const handleDownload = (content: string, filename: string, mimeType: string) => {
-    const blob = new Blob([content], { type: mimeType })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
-
-  const handlePrint = () => {
-    if (iframeRef.current) {
-      iframeRef.current.contentWindow?.focus()
-      iframeRef.current.contentWindow?.print()
-    }
-  }
-
-  const handleClear = (type: 'xml' | 'xslt') => {
-    if (type === 'xml') updateXmlContent('')
-    else updateXsltContent('')
-  }
+  // File operations (upload/download/drag-drop/print/copy/clear) are
+  // centralized in useFileOps; App just passes its Monaco-aware setters.
+  const {
+    handleFileUpload,
+    handleDragEnter,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    handleCopyHtml,
+    handleDownload,
+    handlePrint,
+    handleClear,
+  } = useFileOps(updateXmlContent, updateXsltContent, iframeRef)
 
   const loadDefaultSample = () => {
     updateXmlContent(DEFAULT_XML)
@@ -1400,7 +1693,7 @@ function App() {
                       <input
                         type="file"
                         accept=".xml"
-                        onChange={(e) => handleFileUploadWrapper(e, 'xml')}
+                        onChange={(e) => handleFileUpload(e, 'xml')}
                         className="hidden"
                       />
                     </label>
@@ -1410,7 +1703,7 @@ function App() {
                       <input
                         type="file"
                         accept=".xslt,.xsl"
-                        onChange={(e) => handleFileUploadWrapper(e, 'xslt')}
+                        onChange={(e) => handleFileUpload(e, 'xslt')}
                         className="hidden"
                       />
                     </label>
@@ -1836,6 +2129,28 @@ function App() {
 
                 <div className="space-y-6">
 
+                  {/* Tasarım Yardımcıları */}
+                  <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-4 space-y-3">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
+                      <Compass className="h-4 w-4 text-indigo-400" />
+                      Tasarım & Yerleşim Yardımcıları
+                    </h4>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center gap-2.5 cursor-pointer p-2 hover:bg-slate-900/50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={showTableBorders}
+                          onChange={(e) => setShowTableBorders(e.target.checked)}
+                          className="rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                        />
+                        <div>
+                          <span className="text-xs font-semibold text-white block">Tablo Izgarasını Göster</span>
+                          <span className="text-[10px] text-slate-500 block mt-0.5">Tüm fatura tablolarının hücre sınırlarını kesikli çizgilerle gösterir.</span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
                   {/* Card 6: Seçilen Eleman Stilleri */}
                   <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4">
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
@@ -1850,12 +2165,67 @@ function App() {
                             Seçilen CSS Sınıfı: {selectedElementName}
                           </span>
                           <button 
-                            onClick={() => setSelectedSelector('')}
+                            onClick={() => {
+                              setSelectedSelector('')
+                              setSelectedLineNumber(0)
+                            }}
                             className="text-[10px] text-slate-500 hover:text-white"
                           >
                             Seçimi Sıfırla
                           </button>
                         </div>
+
+                        {/* Parent breadcrumbs selection helper */}
+                        {(selectedElementDetails?.cellXsltId || selectedElementDetails?.tableXsltId) && (
+                          <div className="flex items-center gap-2 p-2 bg-slate-950 rounded-lg border border-slate-900 text-xs">
+                            <span className="text-[10px] text-slate-500 uppercase font-bold shrink-0">Düzenleme Katmanı:</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 font-mono text-[10px] border border-indigo-500/20">
+                                {selectedElementDetails.targetTagName}
+                              </span>
+                              
+                              {selectedElementDetails.cellXsltId && selectedElementDetails.xsltId !== selectedElementDetails.cellXsltId && (
+                                <>
+                                  <span className="text-slate-700">➜</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (iframeRef.current?.contentWindow) {
+                                        iframeRef.current.contentWindow.postMessage({
+                                          action: 'select-element-by-id',
+                                          xsltId: selectedElementDetails.cellXsltId
+                                        }, '*');
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 bg-slate-900 border border-slate-800 hover:border-indigo-500/40 text-[10px] text-slate-300 hover:text-white rounded transition flex items-center gap-1 cursor-pointer font-semibold"
+                                  >
+                                    Hücreyi Seç (td)
+                                  </button>
+                                </>
+                              )}
+
+                              {selectedElementDetails.tableXsltId && selectedElementDetails.xsltId !== selectedElementDetails.tableXsltId && (
+                                <>
+                                  <span className="text-slate-700">➜</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (iframeRef.current?.contentWindow) {
+                                        iframeRef.current.contentWindow.postMessage({
+                                          action: 'select-element-by-id',
+                                          xsltId: selectedElementDetails.tableXsltId
+                                        }, '*');
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 bg-slate-900 border border-slate-800 hover:border-indigo-500/40 text-[10px] text-slate-300 hover:text-white rounded transition flex items-center gap-1 cursor-pointer font-semibold"
+                                  >
+                                    Tabloyu Seç (table)
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                           
@@ -1941,20 +2311,100 @@ function App() {
                             />
                           </div>
 
-                          {/* Width */}
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-[11px] text-slate-400">
+                           {/* Width */}
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center text-[11px] text-slate-400">
                               <span>Genişlik (Width):</span>
-                              <span className="font-mono text-white">{styleWidth || 'varsayılan'}</span>
+                              <div className="flex gap-1 bg-slate-950 p-0.5 rounded border border-slate-905 text-[9px]">
+                                {['%', 'px', 'auto'].map((unit) => (
+                                  <button
+                                    key={unit}
+                                    type="button"
+                                    onClick={() => {
+                                      setWidthUnit(unit);
+                                      if (unit === 'auto') {
+                                        handleStyleChange('width', 'auto');
+                                      } else {
+                                        const num = parseInt(styleWidth) || (unit === '%' ? 100 : 200);
+                                        handleStyleChange('width', `${num}${unit}`);
+                                      }
+                                    }}
+                                    className={`px-1.5 py-0.5 rounded transition cursor-pointer font-bold ${
+                                      widthUnit === unit ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'
+                                    }`}
+                                  >
+                                    {unit}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                            <input 
-                              type="range" 
-                              min="10" 
-                              max="100" 
-                              value={parseInt(styleWidth) || 100} 
-                              onChange={(e) => handleStyleChange('width', styleWidth.includes('%') ? `${e.target.value}%` : `${e.target.value}px`)}
-                              className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                            />
+                            
+                            {widthUnit !== 'auto' && (
+                              <input 
+                                type="range" 
+                                min={widthUnit === '%' ? 5 : 10} 
+                                max={widthUnit === '%' ? 100 : 1000} 
+                                step={widthUnit === '%' ? 1 : 5}
+                                value={parseInt(styleWidth) || (widthUnit === '%' ? 100 : 200)} 
+                                onChange={(e) => handleStyleChange('width', `${e.target.value}${widthUnit}`)}
+                                className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                              />
+                            )}
+                            
+                            <div className="flex gap-2 items-center">
+                              <input 
+                                type="text" 
+                                value={styleWidth}
+                                onChange={(e) => handleStyleChange('width', e.target.value)}
+                                placeholder="örn: 100%, 250px veya auto"
+                                className="flex-1 bg-slate-950 border border-slate-900 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-600 transition"
+                              />
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-1">
+                              {['20%', '30%', '40%', '50%', '75%', '100%', 'auto'].map((preset) => (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() => {
+                                    if (preset === 'auto') {
+                                      setWidthUnit('auto');
+                                      handleStyleChange('width', 'auto');
+                                    } else {
+                                      const unit = '%';
+                                      const val = parseInt(preset);
+                                      setWidthUnit(unit);
+                                      handleStyleChange('width', `${val}${unit}`);
+                                    }
+                                  }}
+                                  className="px-2 py-0.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500/30 text-[10px] text-slate-400 hover:text-white rounded transition cursor-pointer"
+                                >
+                                  {preset}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Text Wrap / Single Line */}
+                          <div className="space-y-2">
+                            <span className="text-[11px] text-slate-400 block mb-1">Metin Akışı (Wrapping):</span>
+                            <div className="flex flex-col gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleStyleChange('white-space', styleWhiteSpace === 'nowrap' ? 'normal' : 'nowrap')}
+                                className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                                  styleWhiteSpace === 'nowrap' 
+                                    ? 'bg-indigo-600 text-white shadow-sm' 
+                                    : 'bg-slate-950 border border-slate-900 text-slate-400 hover:text-slate-200'
+                                }`}
+                                title="Metnin alt satıra geçmesini engeller ve tek satırda tutar."
+                              >
+                                {styleWhiteSpace === 'nowrap' ? '✓ Tek Satırda Tut (Nowrap)' : 'Normal (Kayabilir)'}
+                              </button>
+                              <span className="text-[9px] text-slate-500 leading-tight">
+                                Boşluk, tire (-) veya slaş (/) içeren metinlerin alta kaymasını önlemek için 'Tek Satırda Tut' butonunu aktif edin.
+                              </span>
+                            </div>
                           </div>
 
                           {/* Color & Alignment */}
@@ -1984,6 +2434,36 @@ function App() {
                               ))}
                             </div>
                           </div>
+
+                          {/* Border Presets (Only show for table cells/rows/tables) */}
+                          {['td', 'th', 'tr', 'table', 'col'].includes(selectedElementDetails?.targetTagName) && (
+                            <div className="col-span-1 md:col-span-2 pt-3 border-t border-slate-900 text-xs">
+                              <span className="text-[11px] text-slate-400 block mb-1.5 font-semibold">Hücre Kenarlık Ayarı:</span>
+                              <div className="flex gap-1.5 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStyleChange('border', '')}
+                                  className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:border-slate-700 text-[10px] text-slate-300 hover:text-white rounded transition cursor-pointer"
+                                >
+                                  Kenarlık Yok
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStyleChange('border-bottom', '1px solid #e2e8f0')}
+                                  className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:border-slate-700 text-[10px] text-slate-300 hover:text-white rounded transition cursor-pointer"
+                                >
+                                  Alt Çizgi (İnce)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStyleChange('border', '1px solid #e2e8f0')}
+                                  className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:border-slate-700 text-[10px] text-slate-300 hover:text-white rounded transition cursor-pointer"
+                                >
+                                  Çerçeve
+                                </button>
+                              </div>
+                            </div>
+                          )}
 
                           {/* Actions: Add Inside, Edit Text or Remove Selected */}
                           <div className="col-span-1 md:col-span-2 pt-4 border-t border-slate-900 flex flex-col gap-2.5">
@@ -2051,7 +2531,7 @@ function App() {
                       <input
                         type="file"
                         accept={editorActiveTab === 'xml' ? '.xml' : '.xslt,.xsl'}
-                        onChange={(e) => handleFileUploadWrapper(e, editorActiveTab)}
+                        onChange={(e) => handleFileUpload(e, editorActiveTab)}
                         className="hidden"
                       />
                     </label>
@@ -2164,7 +2644,7 @@ function App() {
                         <input
                           type="file"
                           accept=".xml"
-                          onChange={(e) => handleFileUploadWrapper(e, 'xml')}
+                          onChange={(e) => handleFileUpload(e, 'xml')}
                           className="hidden"
                         />
                       </label>
@@ -2231,7 +2711,7 @@ function App() {
                         <input
                           type="file"
                           accept=".xslt,.xsl"
-                          onChange={(e) => handleFileUploadWrapper(e, 'xslt')}
+                          onChange={(e) => handleFileUpload(e, 'xslt')}
                           className="hidden"
                         />
                       </label>
@@ -2500,7 +2980,7 @@ function App() {
                                 <input
                                   type="file"
                                   accept=".xml"
-                                  onChange={(e) => handleFileUploadWrapper(e, 'xml')}
+                                  onChange={(e) => handleFileUpload(e, 'xml')}
                                   className="hidden"
                                 />
                               </label>
@@ -2529,7 +3009,7 @@ function App() {
                                   <input
                                     type="file"
                                     accept=".xslt,.xsl"
-                                    onChange={(e) => handleFileUploadWrapper(e, 'xslt')}
+                                    onChange={(e) => handleFileUpload(e, 'xslt')}
                                     className="hidden"
                                   />
                                 </label>
