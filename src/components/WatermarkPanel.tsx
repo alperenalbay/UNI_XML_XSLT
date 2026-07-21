@@ -87,7 +87,7 @@ export function WatermarkPanel() {
   };
 
   return (
-    <section className="space-y-3 border-t border-slate-700 pt-4">
+    <section className="space-y-3 border-t border-slate-700/60 pt-4 mt-2 bg-slate-800/60 border border-slate-700/60 rounded-xl p-3">
       <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
         <Wand2 className="w-4 h-4" />
         Filigran
