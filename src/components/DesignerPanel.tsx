@@ -1,22 +1,25 @@
-import { Sliders, Palette, Type, Layout, Wand2 } from 'lucide-react';
+import { Sliders, Palette, Type, Layout } from 'lucide-react';
 import { useEditorStore } from '../store/editorStore';
+import { WatermarkPanel } from './WatermarkPanel';
 
 export function DesignerPanel() {
   const {
     selectedElement,
-    watermarkText,
-    watermarkColor,
-    watermarkRotation,
-    watermarkVisible,
     themePrimaryColor,
     setThemePrimaryColor,
   } = useEditorStore();
 
   if (!selectedElement) {
+    // Filigran paneli her zaman görünür olsun — element seçimi gerekmez
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-slate-900 text-slate-400 p-4">
-        <Sliders className="w-12 h-12 mb-3 opacity-50" />
-        <p className="text-sm text-center">Preview'dan bir element seçin</p>
+      <div className="flex flex-col h-full bg-slate-900 overflow-auto">
+        <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-4">
+          <Sliders className="w-12 h-12 mb-3 opacity-50" />
+          <p className="text-sm text-center mb-6">Stiller için preview'dan bir element seçin</p>
+          <div className="w-full p-4">
+            <WatermarkPanel />
+          </div>
+        </div>
       </div>
     );
   }
@@ -157,65 +160,8 @@ export function DesignerPanel() {
           </div>
         </section>
 
-        {/* Watermark */}
-        <section className="space-y-3 border-t border-slate-700 pt-4">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
-            <Wand2 className="w-4 h-4" />
-            Filigran
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={watermarkVisible}
-              onChange={() => {}}
-              className="rounded cursor-pointer"
-            />
-            <label className="text-xs text-slate-400">Görünür</label>
-          </div>
-
-          <div>
-            <label className="text-xs text-slate-400 block mb-2">Metin</label>
-            <input
-              type="text"
-              value={watermarkText}
-              onChange={() => {}}
-              className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-slate-400 block mb-2">Renk</label>
-            <div className="flex gap-2">
-              <input
-                type="color"
-                value={watermarkColor}
-                onChange={() => {}}
-                className="w-10 h-9 rounded border border-slate-700 cursor-pointer"
-              />
-              <input
-                type="text"
-                value={watermarkColor}
-                onChange={() => {}}
-                className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-slate-400 block mb-2">
-              Döndürme ({watermarkRotation}°)
-            </label>
-            <input
-              type="range"
-              min="-180"
-              max="180"
-              value={watermarkRotation}
-              onChange={() => {}}
-              className="w-full"
-            />
-          </div>
-        </section>
+        {/* Watermark — her zaman görünür, element seçimi gerekmez */}
+        <WatermarkPanel />
       </div>
     </div>
   );

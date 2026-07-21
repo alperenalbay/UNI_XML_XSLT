@@ -25,7 +25,8 @@ import {
   Compass,
   LayoutGrid,
   Sliders,
-  Edit3
+  Edit3,
+  Wand2
 } from 'lucide-react'
 import { 
   transformXmlWithXslt, 
@@ -43,6 +44,7 @@ import {
 } from './utils/xsltTransformer'
 import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 import { ToastContainer, useToast } from './components'
+import { WatermarkPanel } from './components/WatermarkPanel'
 import { useEditorStore } from './store/editorStore'
 import { useFileOps } from './hooks'
 
@@ -78,7 +80,12 @@ function App() {
     updateCheckStatus, setUpdateCheckStatus,
     isDragging, setIsDragging,
     hasDismissedXslt, setHasDismissedXslt,
-    appTheme, setAppTheme
+    appTheme, setAppTheme,
+    watermarkVisible,
+    watermarkImage,
+    watermarkSize,
+    watermarkOpacity,
+    watermarkRotation
   } = useEditorStore();
 
   const previewLayout = 'A4';
@@ -697,8 +704,44 @@ function App() {
         rawHtml = rawHtml.replace('</head>', `${scriptCode}</head>`);
       }
     }
+
+    // Live preview watermark overlay (in-memory only — not written to XSLT unless user clicks "XSLT'ye Kaydet")
+    if (watermarkVisible && watermarkImage) {
+      const safeSize = Math.max(1, Math.min(100, Math.round(watermarkSize)));
+      const safeOpacity = Math.max(0, Math.min(100, Math.round(watermarkOpacity)));
+      const safeRotation = Math.round(watermarkRotation);
+      const overlayStyle = [
+        'position:absolute',
+        'top:0',
+        'left:0',
+        'width:100%',
+        'height:100%',
+        'display:flex',
+        'align-items:center',
+        'justify-content:center',
+        'pointer-events:none',
+        'z-index:9999',
+      ].join('; ');
+      const imgStyle = [
+        `width:${safeSize}%`,
+        'height:auto',
+        'max-height:100%',
+        'object-fit:contain',
+        `opacity:${(safeOpacity / 100).toFixed(2)}`,
+        `transform:rotate(${safeRotation}deg)`,
+        'user-select:none',
+      ].join('; ');
+      const previewWatermarkBlock = `<div class="uni-watermark-preview-overlay" style="${overlayStyle}"><img src="${watermarkImage}" alt="" style="${imgStyle}" /></div>`;
+      // Mark as transient preview-only overlay (distinct from saved uni-watermark-overlay)
+      if (rawHtml.includes('<body')) {
+        rawHtml = rawHtml.replace(/<body\b[^>]*>/i, (m) => `${m}\n${previewWatermarkBlock}`);
+      } else {
+        rawHtml = previewWatermarkBlock + rawHtml;
+      }
+    }
+
     return rawHtml || '<p style="padding: 20px; color: #64748b; font-family: sans-serif; text-align: center;">Dönüştürülmüş fatura görüntüsü burada görüntülenecektir.</p>';
-  }, [htmlOutput, errorMsg, inspectorActive, designerActive, showTableBorders])
+  }, [htmlOutput, errorMsg, inspectorActive, designerActive, showTableBorders, watermarkVisible, watermarkImage, watermarkSize, watermarkOpacity, watermarkRotation])
 
   // Attach event listeners and apply layout sizing inside the iframe document on load
   const handleIframeLoad = () => {
@@ -2510,6 +2553,15 @@ function App() {
                     )}
                   </div>
 
+                </div>
+
+                {/* Card 7: Filigran (Watermark) — her zaman görünür, element seçimi gerekmez */}
+                <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
+                    <Wand2 className="h-4 w-4 text-indigo-400" />
+                    Filigran (Watermark)
+                  </h4>
+                  <WatermarkPanel />
                 </div>
 
                 <div className="mt-8 pt-4 border-t border-slate-900 text-xs text-slate-500 flex items-center justify-between">
