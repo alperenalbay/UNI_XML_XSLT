@@ -49,7 +49,3 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
     </div>
   )
 }
-
-// Re-export the hook and store for backward compatibility
-export { useToast, useToastStore } from '../store/toastStore'
-export type { Toast } from '../store/toastStore'

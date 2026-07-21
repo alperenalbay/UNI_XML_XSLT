@@ -1,3 +1,9 @@
+import {
+  injectXsltIdsWithCounter,
+  removeAllXsltIds,
+  findElementByXsltId,
+} from './xsltIdUtils';
+
 export interface TransformResult {
   html: string;
   error?: string;
@@ -38,20 +44,8 @@ export function transformXmlWithXslt(xmlString: string, xsltString: string): Tra
     }
 
     // 3. XSLT Elemanlarına Geçici Benzersiz ID Enjeksiyonu (data-xslt-id)
-    let xsltIdCounter = 1;
-    const injectXsltIds = (node: Node) => {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const el = node as Element;
-        if (el.namespaceURI !== 'http://www.w3.org/1999/XSL/Transform') {
-          el.setAttribute('data-xslt-id', String(xsltIdCounter++));
-        }
-      }
-      for (let i = 0; i < node.childNodes.length; i++) {
-        injectXsltIds(node.childNodes[i]);
-      }
-    };
     if (xsltDoc.documentElement) {
-      injectXsltIds(xsltDoc.documentElement);
+      injectXsltIdsWithCounter(xsltDoc.documentElement, 1);
     }
 
     // 4. XSLT Dönüşüm İşlemi
@@ -69,6 +63,12 @@ export function transformXmlWithXslt(xmlString: string, xsltString: string): Tra
       const transformedDoc = xsltProcessor.transformToDocument(xmlDoc);
       
       // Bazı tarayıcılarda transform sonucu boş veya hata belgesi dönebilir
+      if (!transformedDoc) {
+        return {
+          html: '',
+          error: 'XSLT Dönüşüm Hatası: Dönüşüm işlemi başarısız oldu veya boş (null) döküman döndü.'
+        };
+      }
       const transformError = transformedDoc.querySelector('parsererror');
       if (transformError) {
         return {
@@ -274,7 +274,7 @@ export function updateXsltStyle(xsltCode: string, selector: string, property: st
     
     const styleContent = xsltCode.substring(styleBlockStart, styleBlockEnd + 8);
     
-    const escapedSelector = selector.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const escapedSelector = selector.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
     const selectorRegex = new RegExp(`(${escapedSelector}\\s*\\{[^}]*\\})`, 'i');
     const selectorMatch = styleContent.match(selectorRegex);
     
@@ -315,7 +315,7 @@ export function getXsltStyleValue(xsltCode: string, selector: string, property: 
     if (styleBlockStart === -1 || styleBlockEnd === -1) return '';
     
     const styleContent = xsltCode.substring(styleBlockStart, styleBlockEnd);
-    const escapedSelector = selector.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const escapedSelector = selector.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
     const selectorRegex = new RegExp(`${escapedSelector}\\s*\\{[^}]*\\}`, 'i');
     const selectorMatch = styleContent.match(selectorRegex);
     
@@ -331,6 +331,31 @@ export function getXsltStyleValue(xsltCode: string, selector: string, property: 
     console.error('Failed to get XSLT style value', e);
   }
   return '';
+}
+
+/**
+ * XSLT elemanının içeriğini fiziksel <nobr> etiketi içine sararak veya çıkararak
+ * gerçek fatura motorlarında satır kaymasını kesin olarak önler.
+ */
+function applyNobrWrap(el: Element, enabled: boolean) {
+  const doc = el.ownerDocument;
+  if (!doc) return;
+
+  const firstChild = el.firstElementChild;
+  const isWrapped = firstChild && firstChild.tagName.toLowerCase() === 'nobr';
+
+  if (enabled && !isWrapped) {
+    const nobr = doc.createElement('nobr');
+    while (el.firstChild) {
+      nobr.appendChild(el.firstChild);
+    }
+    el.appendChild(nobr);
+  } else if (!enabled && isWrapped && firstChild) {
+    while (firstChild.firstChild) {
+      el.insertBefore(firstChild.firstChild, firstChild);
+    }
+    el.removeChild(firstChild);
+  }
 }
 
 /**
@@ -354,39 +379,12 @@ export function updateElementStyleInXsltById(
     }
 
     // Inject sequential IDs using the exact same deterministic algorithm
-    let xsltIdCounter = 1;
-    const injectXsltIds = (node: Node) => {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const element = node as Element;
-        if (element.namespaceURI !== 'http://www.w3.org/1999/XSL/Transform') {
-          element.setAttribute('data-xslt-id', String(xsltIdCounter++));
-        }
-      }
-      for (let i = 0; i < node.childNodes.length; i++) {
-        injectXsltIds(node.childNodes[i]);
-      }
-    };
     if (doc.documentElement) {
-      injectXsltIds(doc.documentElement);
+      injectXsltIdsWithCounter(doc.documentElement, 1);
     }
 
     // Find the element by data-xslt-id
-    const idToFind = String(xsltId);
-    const findElementByXsltId = (root: Node): Element | null => {
-      if (root.nodeType === Node.ELEMENT_NODE) {
-        const element = root as Element;
-        if (element.getAttribute('data-xslt-id') === idToFind) {
-          return element;
-        }
-      }
-      for (let i = 0; i < root.childNodes.length; i++) {
-        const found = findElementByXsltId(root.childNodes[i]);
-        if (found) return found;
-      }
-      return null;
-    };
-
-    const el = findElementByXsltId(doc.documentElement);
+    const el = doc.documentElement ? findElementByXsltId(doc.documentElement, xsltId) : null;
     if (el) {
       // Parse the inline style attribute
       const currentStyle = el.getAttribute('style') || '';
@@ -407,7 +405,7 @@ export function updateElementStyleInXsltById(
       // Update or add the property
       if (value) {
         let finalValue = value.trim();
-        const importantProps = ['color', 'margin', 'padding', 'font-size', 'width', 'text-align', 'font-weight', 'font-style', 'text-decoration'];
+        const importantProps = ['color', 'margin', 'padding', 'font-size', 'width', 'text-align', 'font-weight', 'font-style', 'text-decoration', 'white-space'];
         if (importantProps.includes(property.toLowerCase()) && !finalValue.toLowerCase().includes('!important')) {
           finalValue = `${finalValue} !important`;
         }
@@ -427,17 +425,25 @@ export function updateElementStyleInXsltById(
         el.removeAttribute('style');
       }
 
+      // If property is width, also update raw HTML 'width' attribute for maximum compatibility in XML engines!
+      if (property.toLowerCase() === 'width') {
+        if (value) {
+          const attrVal = value.replace(/\s*!important/gi, '').trim();
+          el.setAttribute('width', attrVal);
+        } else {
+          el.removeAttribute('width');
+        }
+      }
+
+      // If property is white-space, apply physical <nobr> wrapping inside template to ensure it never wraps in real invoices!
+      if (property.toLowerCase() === 'white-space') {
+        const isNowrap = value.toLowerCase().includes('nowrap');
+        applyNobrWrap(el, isNowrap);
+      }
+
       // Clean up all temporary data-xslt-id attributes
-      const removeXsltIds = (node: Node) => {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          (node as Element).removeAttribute('data-xslt-id');
-        }
-        for (let i = 0; i < node.childNodes.length; i++) {
-          removeXsltIds(node.childNodes[i]);
-        }
-      };
       if (doc.documentElement) {
-        removeXsltIds(doc.documentElement);
+        removeAllXsltIds(doc.documentElement);
       }
 
       return new XMLSerializer().serializeToString(doc);
@@ -464,53 +470,18 @@ export function updateElementTextInXsltById(xsltCode: string, xsltId: string, ne
     }
 
     // Inject sequential IDs using the exact same deterministic algorithm
-    let xsltIdCounter = 1;
-    const injectXsltIds = (node: Node) => {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const element = node as Element;
-        if (element.namespaceURI !== 'http://www.w3.org/1999/XSL/Transform') {
-          element.setAttribute('data-xslt-id', String(xsltIdCounter++));
-        }
-      }
-      for (let i = 0; i < node.childNodes.length; i++) {
-        injectXsltIds(node.childNodes[i]);
-      }
-    };
     if (doc.documentElement) {
-      injectXsltIds(doc.documentElement);
+      injectXsltIdsWithCounter(doc.documentElement, 1);
     }
 
     // Find the element by data-xslt-id
-    const idToFind = String(xsltId);
-    const findElementByXsltId = (root: Node): Element | null => {
-      if (root.nodeType === Node.ELEMENT_NODE) {
-        const element = root as Element;
-        if (element.getAttribute('data-xslt-id') === idToFind) {
-          return element;
-        }
-      }
-      for (let i = 0; i < root.childNodes.length; i++) {
-        const found = findElementByXsltId(root.childNodes[i]);
-        if (found) return found;
-      }
-      return null;
-    };
-
-    const el = findElementByXsltId(doc.documentElement);
+    const el = doc.documentElement ? findElementByXsltId(doc.documentElement, xsltId) : null;
     if (el) {
       el.textContent = newText;
 
       // Clean up all temporary data-xslt-id attributes
-      const removeXsltIds = (node: Node) => {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          (node as Element).removeAttribute('data-xslt-id');
-        }
-        for (let i = 0; i < node.childNodes.length; i++) {
-          removeXsltIds(node.childNodes[i]);
-        }
-      };
       if (doc.documentElement) {
-        removeXsltIds(doc.documentElement);
+        removeAllXsltIds(doc.documentElement);
       }
 
       return new XMLSerializer().serializeToString(doc);
@@ -639,6 +610,135 @@ export function updateWatermarkTextInXslt(xsltCode: string, newText: string): st
 }
 
 /**
+ * Bir XSLT görselinin base64 verisinden üretilecekWatermarkJSON'dur.
+ * Görsel gövdede tam ortalanmış, silüet (siyah + düşük opaklık) olarak konumlanır.
+ */
+export interface WatermarkOptions {
+  image: string;         // base64 data URI (örn. "data:image/png;base64,....")
+  size: number;           // fatura genişliğine göre yüzde (1-100)
+  opacity: number;        // 0-100 (silüet için düşük değer önerilir)
+  rotation: number;       // derece
+}
+
+const WATERMARK_START_MARKER = '<!-- uni-watermark-start -->';
+const WATERMARK_END_MARKER = '<!-- uni-watermark-end -->';
+
+function escapeForXmlAttribute(text: string): string {
+  return text
+    .replace(/&/g, '&')
+    .replace(/"/g, '"')
+    .replace(/</g, '<')
+    .replace(/>/g, '>');
+}
+
+function buildWatermarkBlock(opts: WatermarkOptions): string {
+  const { image, size, opacity, rotation } = opts;
+  const safeSize = Math.max(1, Math.min(100, Math.round(size)));
+  const safeOpacity = Math.max(0, Math.min(100, Math.round(opacity)));
+  const safeRotation = Math.round(rotation);
+  const overlayStyle = [
+    'position:absolute',
+    'top:0',
+    'left:0',
+    'width:100%',
+    'height:100%',
+    'display:flex',
+    'align-items:center',
+    'justify-content:center',
+    'pointer-events:none',
+    'z-index:9999',
+  ].join('; ');
+  const imgStyle = [
+    `width:${safeSize}%`,
+    'height:auto',
+    'max-height:100%',
+    'object-fit:contain',
+    `opacity:${(safeOpacity / 100).toFixed(2)}`,
+    `transform:rotate(${safeRotation}deg)`,
+    '-webkit-user-select:none',
+    'user-select:none',
+  ].join('; ');
+  const escapedImage = escapeForXmlAttribute(image);
+  return `${WATERMARK_START_MARKER}
+<div class="uni-watermark-overlay" style="${overlayStyle}">
+  <img src="${escapedImage}" alt="" style="${imgStyle}" />
+</div>
+${WATERMARK_END_MARKER}`;
+}
+
+/**
+ * Verilen XSLT içeriğine görsel filigran (silüet) ekler.
+ * `<body>` açılış etiketinden hemen sonra overlay div enjekte eder.
+ * Eğer body yoksa, `<html>` açılışından sonra ekler.
+ * Eğer zaten bir filigran bloğı varsa günceller (idempotent).
+ *
+ * XSLT koduna kalıcı olarak yazılır — kullanıcı düzenleyebilir.
+ */
+export function addWatermarkToXslt(xsltCode: string, opts: WatermarkOptions): string {
+  if (!xsltCode.trim() || !opts.image) return xsltCode;
+
+  try {
+    const block = buildWatermarkBlock(opts);
+    const startIdx = xsltCode.indexOf(WATERMARK_START_MARKER);
+    if (startIdx !== -1) {
+      const endIdx = xsltCode.indexOf(WATERMARK_END_MARKER, startIdx);
+      if (endIdx !== -1) {
+        const afterEnd = xsltCode.indexOf('>', endIdx);
+        const tail = afterEnd !== -1 ? xsltCode.substring(afterEnd + 1) : '';
+        return xsltCode.substring(0, startIdx) + block + tail;
+      }
+    }
+
+    // Body açılışını bul (multi-line attribute'lara dayanıklı regex)
+    const bodyMatch = xsltCode.match(/<body\b[^>]*>/i);
+    if (bodyMatch && bodyMatch.index !== undefined) {
+      const insertAt = bodyMatch.index + bodyMatch[0].length;
+      return xsltCode.substring(0, insertAt) + '\n' + block + xsltCode.substring(insertAt);
+    }
+
+    // Html açılışını bul (body yokken yedek)
+    const htmlMatch = xsltCode.match(/<html\b[^>]*>/i);
+    if (htmlMatch && htmlMatch.index !== undefined) {
+      const insertAt = htmlMatch.index + htmlMatch[0].length;
+      return xsltCode.substring(0, insertAt) + '\n' + block + xsltCode.substring(insertAt);
+    }
+
+    return xsltCode;
+  } catch (err) {
+    console.error('Failed to add watermark to XSLT', err);
+    return xsltCode;
+  }
+}
+
+/**
+ * XSLT içinden uni-watermark overlay bloğunu kaldırır.
+ * Marker comment'leriyle çevrelenmiş bloğu temizler.
+ */
+export function removeWatermarkFromXslt(xsltCode: string): string {
+  if (!xsltCode.trim()) return xsltCode;
+  try {
+    const startIdx = xsltCode.indexOf(WATERMARK_START_MARKER);
+    if (startIdx === -1) return xsltCode;
+    const endIdx = xsltCode.indexOf(WATERMARK_END_MARKER, startIdx);
+    if (endIdx === -1) return xsltCode;
+    const afterEnd = xsltCode.indexOf('>', endIdx);
+    const tail = afterEnd !== -1 ? xsltCode.substring(afterEnd + 1) : '';
+    return xsltCode.substring(0, startIdx) + tail.replace(/^\n+/, '');
+  } catch (err) {
+    console.error('Failed to remove watermark from XSLT', err);
+    return xsltCode;
+  }
+}
+
+/**
+ * XSLT içeriğinde şu anda bir filigran bloğu var mı kontrol eder.
+ */
+export function hasWatermarkInXslt(xsltCode: string): boolean {
+  if (!xsltCode.trim()) return false;
+  return xsltCode.indexOf(WATERMARK_START_MARKER) !== -1;
+}
+
+/**
  * XSLT içerisine yeni bir metin alanı ekler ve onun için CSS kuralı tanımlar.
  */
 export function addElementToXslt(
@@ -662,37 +762,8 @@ export function addElementToXslt(
 
     // 1. Try to find parent by unique temporary XSLT ID if details is provided
     if (details && details.xsltId) {
-      let xsltIdCounter = 1;
-      const injectXsltIds = (node: Node) => {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          const element = node as Element;
-          if (element.namespaceURI !== 'http://www.w3.org/1999/XSL/Transform') {
-            element.setAttribute('data-xslt-id', String(xsltIdCounter++));
-          }
-        }
-        for (let i = 0; i < node.childNodes.length; i++) {
-          injectXsltIds(node.childNodes[i]);
-        }
-      };
-      if (doc.documentElement) {
-        injectXsltIds(doc.documentElement);
-      }
-
-      const idToFind = String(details.xsltId);
-      const findElementByXsltId = (root: Node): Element | null => {
-        if (root.nodeType === Node.ELEMENT_NODE) {
-          const element = root as Element;
-          if (element.getAttribute('data-xslt-id') === idToFind) {
-            return element;
-          }
-        }
-        for (let i = 0; i < root.childNodes.length; i++) {
-          const found = findElementByXsltId(root.childNodes[i]);
-          if (found) return found;
-        }
-        return null;
-      };
-      parentEl = findElementByXsltId(doc.documentElement);
+      injectXsltIdsWithCounter(doc.documentElement, 1);
+      parentEl = findElementByXsltId(doc.documentElement, String(details.xsltId));
     }
 
     // 2. Fallback to selector matching if not found by XSLT ID
@@ -761,16 +832,8 @@ export function addElementToXslt(
       parentEl.appendChild(newDiv);
 
       // Clean up temporary IDs
-      const removeXsltIds = (node: Node) => {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          (node as Element).removeAttribute('data-xslt-id');
-        }
-        for (let i = 0; i < node.childNodes.length; i++) {
-          removeXsltIds(node.childNodes[i]);
-        }
-      };
       if (doc.documentElement) {
-        removeXsltIds(doc.documentElement);
+        removeAllXsltIds(doc.documentElement);
       }
       
       let serialized = new XMLSerializer().serializeToString(doc);
@@ -815,37 +878,8 @@ export function removeElementFromXslt(xsltCode: string, selector: string, detail
 
     // 1. Try to find by unique temporary XSLT ID if details is provided
     if (details && details.xsltId) {
-      let xsltIdCounter = 1;
-      const injectXsltIds = (node: Node) => {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          const element = node as Element;
-          if (element.namespaceURI !== 'http://www.w3.org/1999/XSL/Transform') {
-            element.setAttribute('data-xslt-id', String(xsltIdCounter++));
-          }
-        }
-        for (let i = 0; i < node.childNodes.length; i++) {
-          injectXsltIds(node.childNodes[i]);
-        }
-      };
-      if (doc.documentElement) {
-        injectXsltIds(doc.documentElement);
-      }
-
-      const idToFind = String(details.xsltId);
-      const findElementByXsltId = (root: Node): Element | null => {
-        if (root.nodeType === Node.ELEMENT_NODE) {
-          const element = root as Element;
-          if (element.getAttribute('data-xslt-id') === idToFind) {
-            return element;
-          }
-        }
-        for (let i = 0; i < root.childNodes.length; i++) {
-          const found = findElementByXsltId(root.childNodes[i]);
-          if (found) return found;
-        }
-        return null;
-      };
-      el = findElementByXsltId(doc.documentElement);
+      injectXsltIdsWithCounter(doc.documentElement, 1);
+      el = findElementByXsltId(doc.documentElement, String(details.xsltId));
     }
 
     // 2. If not found by XSLT ID, fallback to detailed base64 matching (for images)
@@ -934,25 +968,17 @@ export function removeElementFromXslt(xsltCode: string, selector: string, detail
 
     if (el && el.parentNode) {
       el.parentNode.removeChild(el);
-      
+
       // Clean up all temporary data-xslt-id attributes before serializing
-      const removeXsltIds = (node: Node) => {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          (node as Element).removeAttribute('data-xslt-id');
-        }
-        for (let i = 0; i < node.childNodes.length; i++) {
-          removeXsltIds(node.childNodes[i]);
-        }
-      };
       if (doc.documentElement) {
-        removeXsltIds(doc.documentElement);
+        removeAllXsltIds(doc.documentElement);
       }
 
       let serialized = new XMLSerializer().serializeToString(doc);
 
       // CSS stil kuralını temizle
       if (selector.startsWith('.') || selector.startsWith('#')) {
-        const escapedSelector = selector.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const escapedSelector = selector.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
         const cssRegex = new RegExp(`\\s*${escapedSelector}\\s*\\{[^}]*\\}`, 'i');
         serialized = serialized.replace(cssRegex, '');
       }
@@ -1010,9 +1036,317 @@ export function updateElementTextInXsltByClass(xsltCode: string, className: stri
   return xsltCode;
 }
 
+/**
+ * Monaco editöründe hedeflenen satırdaki XML etiketinin width ve style özelliklerini
+ * doğrudan metin (string) düzeyinde günceller. Bu sayede tüm belgenin parse/serialize
+ * edilip bozulma ihtimalini ortadan kaldırır.
+ */
+export function updateXsltTagAtLine(
+  xsltContent: string,
+  lineNumber: number,
+  property: string,
+  value: string
+): string {
+  if (lineNumber < 1) return xsltContent;
+  const lines = xsltContent.split('\n');
+  const lineIndex = lineNumber - 1;
+  if (lineIndex >= lines.length) return xsltContent;
 
+  let lineText = lines[lineIndex];
+  const tagMatch = lineText.match(/<([a-zA-Z0-9:-]+)/);
+  if (!tagMatch) return xsltContent;
 
+  let tagName = tagMatch[1];
+  let activeLineIndex = lineIndex;
 
+  // XSLT etiketlerini (örn: <xsl:text>) doğrudan değiştirmeyi engelle; en yakın üst HTML kapsayıcısını bul
+  if (tagName.startsWith('xsl:')) {
+    let foundHtmlParent = false;
+    for (let k = lineIndex - 1; k >= 0; k--) {
+      const parentLineText = lines[k];
+      const parentTagMatch = parentLineText.match(/<([a-zA-Z0-9:-]+)/);
+      if (parentTagMatch) {
+        const parentTagName = parentTagMatch[1];
+        if (!parentTagName.startsWith('xsl:') && !parentLineText.includes('/>') && !parentLineText.includes('</' + parentTagName + '>')) {
+          activeLineIndex = k;
+          lineText = parentLineText;
+          tagName = parentTagName;
+          foundHtmlParent = true;
+          break;
+        }
+      }
+    }
+    if (!foundHtmlParent) return xsltContent; // Üst HTML kapsayıcısı yoksa işlemi pas geç
+  }
 
+  // 1. White-space için <nobr> sarmalı (Çoklu satır uyumlu ve etiket eşleşme garantili)
+  if (property.toLowerCase() === 'white-space') {
+    const isNowrap = value.toLowerCase().includes('nowrap');
+    const hasNobr = lineText.includes('<nobr>') || lineText.includes('&lt;nobr&gt;');
+    
+    if (isNowrap && !hasNobr) {
+      const tagCloseIndex = lineText.indexOf('>');
+      if (tagCloseIndex !== -1) {
+        if (lineText.charAt(tagCloseIndex - 1) === '/') return xsltContent;
+        
+        const endTagStr = `</${tagName}>`;
+        let endLineIndex = -1;
+        let openTagsCount = 0;
+
+        for (let j = activeLineIndex; j < lines.length; j++) {
+          const currentLine = lines[j];
+          const openMatches = currentLine.match(new RegExp(`<${tagName}\\b`, 'g')) || [];
+          const closeMatches = currentLine.match(new RegExp(`</${tagName}>`, 'g')) || [];
+          
+          openTagsCount += openMatches.length;
+          openTagsCount -= closeMatches.length;
+          
+          if (openTagsCount <= 0) {
+            endLineIndex = j;
+            break;
+          }
+        }
+
+        if (endLineIndex !== -1) {
+          if (endLineIndex === activeLineIndex) {
+            const endTagIndex = lineText.lastIndexOf(endTagStr);
+            if (endTagIndex > tagCloseIndex) {
+              lineText = lineText.substring(0, tagCloseIndex + 1) + 
+                         '<nobr>' + 
+                         lineText.substring(tagCloseIndex + 1, endTagIndex) + 
+                         '</nobr>' + 
+                         lineText.substring(endTagIndex);
+              lines[activeLineIndex] = lineText;
+            }
+          } else {
+            lineText = lineText.substring(0, tagCloseIndex + 1) + '<nobr>' + lineText.substring(tagCloseIndex + 1);
+            const endLineText = lines[endLineIndex];
+            const endTagIndex = endLineText.indexOf(endTagStr);
+            if (endTagIndex !== -1) {
+              lines[endLineIndex] = endLineText.substring(0, endTagIndex) + '</nobr>' + endLineText.substring(endTagIndex);
+            }
+          }
+        }
+      }
+    } else if (!isNowrap && hasNobr) {
+      lineText = lineText.replace(/<nobr>/gi, '');
+      if (lineText.includes('</nobr>')) {
+        lineText = lineText.replace(/<\/nobr>/gi, '');
+      } else {
+        for (let j = activeLineIndex + 1; j < lines.length; j++) {
+          if (lines[j].includes('</nobr>')) {
+            lines[j] = lines[j].replace(/<\/nobr>/gi, '');
+            break;
+          }
+        }
+      }
+      lines[activeLineIndex] = lineText;
+    }
+    lines[activeLineIndex] = lineText;
+  }
+
+  // 2. Şimdi, activeLineIndex'te başlayan start tag'i bulup style ve width niteliklerini güncelleyelim.
+  let fullTagText = '';
+  let endTagLineIndex = activeLineIndex;
+  let firstCloseIndex = -1;
+
+  for (let k = activeLineIndex; k < lines.length; k++) {
+    const lineVal = lines[k];
+    firstCloseIndex = lineVal.indexOf('>');
+    if (firstCloseIndex !== -1) {
+      fullTagText += (k === activeLineIndex ? '' : '\n') + lineVal.substring(0, firstCloseIndex + 1);
+      endTagLineIndex = k;
+      break;
+    } else {
+      fullTagText += (k === activeLineIndex ? '' : '\n') + lineVal;
+    }
+  }
+
+  if (firstCloseIndex !== -1) {
+    const updatedTag = updateAttributesInTagString(fullTagText, property, value);
+    const lineRemainder = lines[endTagLineIndex].substring(firstCloseIndex + 1);
+    lines.splice(activeLineIndex, endTagLineIndex - activeLineIndex + 1, updatedTag + lineRemainder);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Bir tag string'i içerisindeki nitelikleri (style, width vb.) güvenli bir şekilde günceller.
+ */
+function updateAttributesInTagString(tagString: string, property: string, value: string): string {
+  try {
+    const parser = new DOMParser();
+    const isSelfClosing = tagString.trim().endsWith('/>');
+    const cleanTag = isSelfClosing ? tagString : tagString.replace(/>\s*$/, '/>');
+    const xml = `<root>${cleanTag}</root>`;
+    const doc = parser.parseFromString(xml, 'application/xml');
+    
+    if (doc.querySelector('parsererror')) {
+      return tagString;
+    }
+    
+    const el = doc.documentElement.firstElementChild;
+    if (!el) return tagString;
+
+    // Width niteliği
+    if (property.toLowerCase() === 'width') {
+      const cleanVal = value.replace(/\s*!important/gi, '').trim();
+      if (cleanVal) {
+        el.setAttribute('width', cleanVal);
+      } else {
+        el.removeAttribute('width');
+      }
+    }
+
+    // nowrap niteliği (Sadece td ve th için geçerlidir)
+    if (property.toLowerCase() === 'white-space') {
+      const isNowrap = value.toLowerCase().includes('nowrap');
+      const tagName = el.tagName.toLowerCase();
+      if (tagName === 'td' || tagName === 'th') {
+        if (isNowrap) {
+          el.setAttribute('nowrap', 'nowrap');
+        } else {
+          el.removeAttribute('nowrap');
+        }
+      }
+    }
+
+    // Style niteliği
+    const currentStyle = el.getAttribute('style') || '';
+    const stylesMap: Record<string, string> = {};
+    currentStyle.split(';').forEach(pair => {
+      const parts = pair.split(':');
+      if (parts.length >= 2) {
+        const key = parts[0].trim().toLowerCase();
+        const val = parts.slice(1).join(':').trim();
+        if (key) stylesMap[key] = val;
+      }
+    });
+
+    if (value) {
+      let finalValue = value.trim();
+      const importantProps = ['color', 'margin', 'padding', 'font-size', 'width', 'text-align', 'font-weight', 'font-style', 'text-decoration', 'white-space'];
+      if (importantProps.includes(property.toLowerCase()) && !finalValue.toLowerCase().includes('!important')) {
+        finalValue = `${finalValue} !important`;
+      }
+      stylesMap[property.toLowerCase()] = finalValue;
+    } else {
+      delete stylesMap[property.toLowerCase()];
+    }
+
+    const styleString = Object.entries(stylesMap)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join('; ');
+
+    if (styleString) {
+      el.setAttribute('style', styleString + ';');
+    } else {
+      el.removeAttribute('style');
+    }
+
+    const serializer = new XMLSerializer();
+    let serializedEl = serializer.serializeToString(el);
+
+    if (isSelfClosing && !serializedEl.endsWith('/>')) {
+      serializedEl = serializedEl.replace(/>$/, '/>');
+    } else if (!isSelfClosing && serializedEl.endsWith('/>')) {
+      serializedEl = serializedEl.replace(/\/>$/, '>');
+    }
+
+    return serializedEl;
+  } catch (e) {
+    console.error('Error updating attributes in tag string', e);
+    return tagString;
+  }
+}
+
+/**
+ * XSLT ID'sini (data-xslt-id) barındıran öğeyi DOM üzerinden bulup,
+ * o öğenin Monaco editöründeki satır numarasını bulur.
+ */
+export function findLineByXsltId(xsltCode: string, targetId: string): number {
+  if (!xsltCode.trim() || !targetId) return 0;
+  try {
+    let line = 1;
+    let xsltIdCounter = 1;
+    const target = Number(targetId);
+    
+    // Find XSLT prefix from the stylesheet element, e.g. <xsl:stylesheet -> xsl
+    let xslPrefix = 'xsl';
+    const rootMatch = xsltCode.match(/<([a-zA-Z0-9_-]+):(?:stylesheet|transform)/i);
+    if (rootMatch) {
+      xslPrefix = rootMatch[1];
+    }
+    
+    const xslPrefixColon = xslPrefix + ':';
+    let inTag = false;
+    let tagContent = '';
+    let currentTagStartLine = 1;
+    
+    for (let i = 0; i < xsltCode.length; i++) {
+      const char = xsltCode[i];
+      if (char === '\n') {
+        line++;
+      }
+      
+      if (char === '<') {
+        // Check if it's not a comment or CDATA
+        if (xsltCode.startsWith('<!--', i)) {
+          const closeIndex = xsltCode.indexOf('-->', i);
+          if (closeIndex !== -1) {
+            const commentText = xsltCode.substring(i, closeIndex + 3);
+            const newlines = (commentText.match(/\n/g) || []).length;
+            line += newlines;
+            i = closeIndex + 2;
+          }
+          continue;
+        }
+        if (xsltCode.startsWith('<![CDATA[', i)) {
+          const closeIndex = xsltCode.indexOf(']]>', i);
+          if (closeIndex !== -1) {
+            const cdataText = xsltCode.substring(i, closeIndex + 3);
+            const newlines = (cdataText.match(/\n/g) || []).length;
+            line += newlines;
+            i = closeIndex + 2;
+          }
+          continue;
+        }
+        
+        inTag = true;
+        tagContent = '';
+        currentTagStartLine = line;
+        continue;
+      }
+      
+      if (char === '>') {
+        if (inTag) {
+          inTag = false;
+          tagContent = tagContent.trim();
+          if (!tagContent.startsWith('/') && !tagContent.startsWith('?') && !tagContent.startsWith('!')) {
+            const tagNameMatch = tagContent.match(/^([a-zA-Z0-9:-]+)/);
+            if (tagNameMatch) {
+              const name = tagNameMatch[1];
+              if (!name.startsWith(xslPrefixColon)) {
+                if (xsltIdCounter === target) {
+                  return currentTagStartLine;
+                }
+                xsltIdCounter++;
+              }
+            }
+          }
+        }
+        continue;
+      }
+      
+      if (inTag) {
+        tagContent += char;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to find line by XSLT ID scanner', e);
+  }
+  return 0;
+}
 
 

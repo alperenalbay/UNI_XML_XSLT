@@ -65,6 +65,9 @@ export interface EditorState {
   watermarkRotation: number;
   watermarkVisible: boolean;
   watermarkColor: string;
+  watermarkImage: string;
+  watermarkSize: number;
+  watermarkOpacity: number;
   
   // Theme
   themePrimaryColor: string;
@@ -123,6 +126,9 @@ export interface EditorActions {
   setWatermarkRotation: (rotation: number) => void;
   setWatermarkVisible: (visible: boolean) => void;
   setWatermarkColor: (color: string) => void;
+  setWatermarkImage: (image: string) => void;
+  setWatermarkSize: (size: number) => void;
+  setWatermarkOpacity: (opacity: number) => void;
   
   // Theme
   setThemePrimaryColor: (color: string) => void;
@@ -177,6 +183,9 @@ const initialState: EditorState = {
   watermarkRotation: -15,
   watermarkVisible: true,
   watermarkColor: '#ef4444',
+  watermarkImage: '',
+  watermarkSize: 60,
+  watermarkOpacity: 15,
   
   themePrimaryColor: '#4f46e5',
   appTheme: 'linear',
@@ -227,6 +236,9 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   setWatermarkRotation: (rotation: number) => set({ watermarkRotation: rotation }),
   setWatermarkVisible: (visible: boolean) => set({ watermarkVisible: visible }),
   setWatermarkColor: (color: string) => set({ watermarkColor: color }),
+  setWatermarkImage: (image: string) => set({ watermarkImage: image }),
+  setWatermarkSize: (size: number) => set({ watermarkSize: size }),
+  setWatermarkOpacity: (opacity: number) => set({ watermarkOpacity: opacity }),
   
   setThemePrimaryColor: (color: string) => set({ themePrimaryColor: color }),
   setAppTheme: (theme: 'linear' | 'vercel' | 'forest' | 'stripe' | 'notion') => set({ appTheme: theme }),

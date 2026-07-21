@@ -5,6 +5,10 @@ import {
   removeEmbeddedXslt,
   addElementToXslt,
   removeElementFromXslt,
+  updateXsltTagAtLine,
+  addWatermarkToXslt,
+  removeWatermarkFromXslt,
+  hasWatermarkInXslt,
 } from './xsltTransformer';
 
 describe('xsltTransformer', () => {
@@ -156,6 +160,171 @@ describe('xsltTransformer', () => {
     it('should not fall back to class if xsltId is provided but not matched', () => {
       const result = removeElementFromXslt(xslt, '.other-class', { xsltId: '999' });
       expect(result).toContain('Item 2');
+    });
+  });
+
+  describe('updateXsltTagAtLine', () => {
+    it('should wrap single-line element with nobr when nowrap is enabled', () => {
+      const code = '<span>Hello</span>';
+      const result = updateXsltTagAtLine(code, 1, 'white-space', 'nowrap');
+      expect(result).toBe('<span style="white-space: nowrap !important;"><nobr>Hello</nobr></span>');
+    });
+
+    it('should unwrap single-line element with nobr when nowrap is disabled', () => {
+      const code = '<span><nobr>Hello</nobr></span>';
+      const result = updateXsltTagAtLine(code, 1, 'white-space', 'normal');
+      expect(result).toBe('<span style="white-space: normal !important;">Hello</span>');
+    });
+
+    it('should wrap multi-line element with nobr and matching closing tag', () => {
+      const code = `<span>
+  <xsl:text>Hello</xsl:text>
+</span>`;
+      const result = updateXsltTagAtLine(code, 1, 'white-space', 'nowrap');
+      const expected = `<span style="white-space: nowrap !important;"><nobr>
+  <xsl:text>Hello</xsl:text>
+</nobr></span>`;
+      expect(result).toBe(expected);
+    });
+
+    it('should unwrap multi-line element correctly', () => {
+      const code = `<span><nobr>
+  <xsl:text>Hello</xsl:text>
+</nobr></span>`;
+      const result = updateXsltTagAtLine(code, 1, 'white-space', 'normal');
+      const expected = `<span style="white-space: normal !important;">
+  <xsl:text>Hello</xsl:text>
+</span>`;
+      expect(result).toBe(expected);
+    });
+
+    it('should redirect update from xsl:text to its parent HTML tag', () => {
+      const code = `<span>
+  <xsl:text>Hello</xsl:text>
+</span>`;
+      const result = updateXsltTagAtLine(code, 2, 'white-space', 'nowrap');
+      const expected = `<span style="white-space: nowrap !important;"><nobr>
+  <xsl:text>Hello</xsl:text>
+</nobr></span>`;
+      expect(result).toBe(expected);
+    });
+
+    it('should update style attribute on a single-line tag', () => {
+      const code = '<div style="color: red;">Hello</div>';
+      const result = updateXsltTagAtLine(code, 1, 'color', 'blue');
+      expect(result).toBe('<div style="color: blue !important;">Hello</div>');
+    });
+
+    it('should update style attribute on a multiline start tag', () => {
+      const code = `<div
+  class="my-div"
+  style="color: red;"
+>
+  Hello
+</div>`;
+      const result = updateXsltTagAtLine(code, 1, 'text-align', 'center');
+      // The updated tag will be serialized on a single line where it was replaced, which is fine
+      expect(result).toBe(`<div class="my-div" style="color: red; text-align: center !important;">
+  Hello
+</div>`);
+    });
+
+    it('should update width attribute and width inside style attribute', () => {
+      const code = '<col width="10%"/>';
+      const result = updateXsltTagAtLine(code, 1, 'width', '20%');
+      expect(result).toBe('<col width="20%" style="width: 20% !important;"/>');
+    });
+  });
+
+  describe('addWatermarkToXslt', () => {
+    const baseXslt = `<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <html>
+      <head><title>Test</title></head>
+      <body>
+        <p>Hello</p>
+      </body>
+    </html>
+  </xsl:template>
+</xsl:stylesheet>`;
+
+    const sampleImage = 'data:image/png;base64,iVBORw0KGgoAAAANS';
+
+    it('should return unchanged XSLT when image is empty', () => {
+      const result = addWatermarkToXslt(baseXslt, { image: '', size: 50, opacity: 20, rotation: -15 });
+      expect(result).toBe(baseXslt);
+    });
+
+    it('should insert watermark overlay inside body', () => {
+      const result = addWatermarkToXslt(baseXslt, { image: sampleImage, size: 50, opacity: 20, rotation: -15 });
+      expect(result).toContain('uni-watermark-overlay');
+      expect(result).toContain(sampleImage);
+      expect(result).toContain('width:50%');
+      expect(result).toContain('opacity:0.20');
+      expect(result).toContain('rotate(-15deg)');
+      const bodyIdx = result.indexOf('<body>');
+      const overlayIdx = result.indexOf('uni-watermark-overlay');
+      expect(overlayIdx).toBeGreaterThan(bodyIdx);
+    });
+
+    it('should fall back to html when body missing', () => {
+      const noBodyXslt = `<?xml version="1.0"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><html><p>x</p></html></xsl:template>
+</xsl:stylesheet>`;
+      const result = addWatermarkToXslt(noBodyXslt, { image: sampleImage, size: 50, opacity: 20, rotation: 0 });
+      expect(result).toContain('uni-watermark-overlay');
+    });
+
+    it('should update existing watermark instead of duplicating (idempotent)', () => {
+      const once = addWatermarkToXslt(baseXslt, { image: sampleImage, size: 50, opacity: 20, rotation: -15 });
+      const twice = addWatermarkToXslt(once, { image: sampleImage, size: 80, opacity: 50, rotation: 45 });
+      expect(twice).toContain('width:80%');
+      expect(twice).toContain('opacity:0.50');
+      expect(twice).toContain('rotate(45deg)');
+      const matches = twice.match(/uni-watermark-overlay/g);
+      expect(matches?.length).toBe(1);
+    });
+
+    it('should clamp size and opacity to safe ranges', () => {
+      const result = addWatermarkToXslt(baseXslt, { image: sampleImage, size: 999, opacity: -20, rotation: -15 });
+      expect(result).toContain('width:100%');
+      expect(result).toContain('opacity:0.00');
+    });
+  });
+
+  describe('removeWatermarkFromXslt', () => {
+    const baseXslt = `<?xml version="1.0"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><html><body><p>x</p></body></html></xsl:template>
+</xsl:stylesheet>`;
+    const sampleImage = 'data:image/png;base64,iVBORw0KGgoAAAANS';
+
+    it('should return unchanged when no watermark exists', () => {
+      expect(removeWatermarkFromXslt(baseXslt)).toBe(baseXslt);
+    });
+
+    it('should remove a watermark block added by addWatermarkToXslt', () => {
+      const marked = addWatermarkToXslt(baseXslt, { image: sampleImage, size: 50, opacity: 20, rotation: -15 });
+      expect(hasWatermarkInXslt(marked)).toBe(true);
+      const cleaned = removeWatermarkFromXslt(marked);
+      expect(hasWatermarkInXslt(cleaned)).toBe(false);
+      expect(cleaned).toContain('<p>x</p>');
+      expect(cleaned).toContain('</body>');
+    });
+  });
+
+  describe('hasWatermarkInXslt', () => {
+    it('should return false for empty and watermark-free XSLT', () => {
+      expect(hasWatermarkInXslt('')).toBe(false);
+      expect(hasWatermarkInXslt('<xsl:stylesheet/>')).toBe(false);
+    });
+
+    it('should return true after watermark added', () => {
+      const baseXslt = '<html><body><p>hi</p></body></html>';
+      const marked = addWatermarkToXslt(baseXslt, { image: 'data:image/png;base64,aaa', size: 50, opacity: 20, rotation: 0 });
+      expect(hasWatermarkInXslt(marked)).toBe(true);
     });
   });
 });

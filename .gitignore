@@ -25,3 +25,6 @@ dist-ssr
 
 # Local templates directory
 public/templates/
+
+# Stray output file accidentally created by start.bat (a bracket name "]")
+]
