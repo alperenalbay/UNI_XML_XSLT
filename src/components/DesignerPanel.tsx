@@ -27,7 +27,7 @@ export function DesignerPanel() {
   return (
     <div className="flex flex-col h-full bg-slate-900 overflow-auto">
       {/* Selected Element Info */}
-      <div className="px-4 py-3 bg-slate-800 border-b border-slate-700 sticky top-0">
+      <div className="px-4 py-3 bg-slate-800 border-b border-slate-700/60 sticky top-0">
         <div className="text-xs font-bold text-slate-300 mb-1">Seçili Element</div>
         <div className="text-xs text-slate-400 font-mono break-all">{selectedElement.selector}</div>
       </div>
@@ -35,7 +35,7 @@ export function DesignerPanel() {
       {/* Style Controls */}
       <div className="flex-1 overflow-auto p-4 space-y-6">
         {/* Typography */}
-        <section className="space-y-3">
+        <section className="space-y-3 bg-slate-800/60 border border-slate-700/60 rounded-xl p-3">
           <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
             <Type className="w-4 h-4" />
             Yazı Stili
@@ -87,7 +87,7 @@ export function DesignerPanel() {
         </section>
 
         {/* Colors */}
-        <section className="space-y-3">
+        <section className="space-y-3 bg-slate-800/60 border border-slate-700/60 rounded-xl p-3">
           <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
             <Palette className="w-4 h-4" />
             Renkler
@@ -131,7 +131,7 @@ export function DesignerPanel() {
         </section>
 
         {/* Spacing */}
-        <section className="space-y-3">
+        <section className="space-y-3 bg-slate-800/60 border border-slate-700/60 rounded-xl p-3">
           <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
             <Layout className="w-4 h-4" />
             Boşluk

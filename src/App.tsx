@@ -2173,18 +2173,18 @@ function App() {
                 <div className="space-y-6">
 
                   {/* Tasarım Yardımcıları */}
-                  <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-4 space-y-3">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
+                  <div className="bg-slate-800/70 border border-slate-700/60 rounded-xl p-4 space-y-3 shadow-lg shadow-black/20">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-700/60 pb-2">
                       <Compass className="h-4 w-4 text-indigo-400" />
                       Tasarım & Yerleşim Yardımcıları
                     </h4>
                     <div className="flex flex-col gap-2">
-                      <label className="flex items-center gap-2.5 cursor-pointer p-2 hover:bg-slate-900/50 rounded-lg transition">
+                      <label className="flex items-center gap-2.5 cursor-pointer p-2 hover:bg-slate-700/60 rounded-lg transition">
                         <input
                           type="checkbox"
                           checked={showTableBorders}
                           onChange={(e) => setShowTableBorders(e.target.checked)}
-                          className="rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                          className="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                         />
                         <div>
                           <span className="text-xs font-semibold text-white block">Tablo Izgarasını Göster</span>
@@ -2195,8 +2195,8 @@ function App() {
                   </div>
 
                   {/* Card 6: Seçilen Eleman Stilleri */}
-                  <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
+                  <div className="bg-slate-800/70 border border-slate-700/60 rounded-xl p-4 space-y-4 shadow-lg shadow-black/20">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-700/60 pb-2">
                       <Sliders className="h-4 w-4 text-purple-400" />
                       Seçilen Eleman Stil Ayarları (WYSIWYG)
                     </h4>
@@ -2220,7 +2220,7 @@ function App() {
 
                         {/* Parent breadcrumbs selection helper */}
                         {(selectedElementDetails?.cellXsltId || selectedElementDetails?.tableXsltId) && (
-                          <div className="flex items-center gap-2 p-2 bg-slate-950 rounded-lg border border-slate-900 text-xs">
+                          <div className="flex items-center gap-2 p-2 bg-slate-900 rounded-lg border border-slate-700/60 text-xs">
                             <span className="text-[10px] text-slate-500 uppercase font-bold shrink-0">Düzenleme Katmanı:</span>
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 font-mono text-[10px] border border-indigo-500/20">
@@ -2240,7 +2240,7 @@ function App() {
                                         }, '*');
                                       }
                                     }}
-                                    className="px-2 py-0.5 bg-slate-900 border border-slate-800 hover:border-indigo-500/40 text-[10px] text-slate-300 hover:text-white rounded transition flex items-center gap-1 cursor-pointer font-semibold"
+                                    className="px-2 py-0.5 bg-slate-800 border border-slate-700 hover:bg-slate-700 hover:border-indigo-500/40 text-[10px] text-slate-300 hover:text-white rounded transition flex items-center gap-1 cursor-pointer font-semibold"
                                   >
                                     Hücreyi Seç (td)
                                   </button>
@@ -2260,7 +2260,7 @@ function App() {
                                         }, '*');
                                       }
                                     }}
-                                    className="px-2 py-0.5 bg-slate-900 border border-slate-800 hover:border-indigo-500/40 text-[10px] text-slate-300 hover:text-white rounded transition flex items-center gap-1 cursor-pointer font-semibold"
+                                    className="px-2 py-0.5 bg-slate-800 border border-slate-700 hover:bg-slate-700 hover:border-indigo-500/40 text-[10px] text-slate-300 hover:text-white rounded transition flex items-center gap-1 cursor-pointer font-semibold"
                                   >
                                     Tabloyu Seç (table)
                                   </button>
@@ -2284,7 +2284,7 @@ function App() {
                               max="36" 
                               value={parseInt(styleFontSize) || 13} 
                               onChange={(e) => handleStyleChange('font-size', `${e.target.value}px`)}
-                              className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                              className="w-full h-2 bg-slate-800 border border-slate-700/60 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                             />
                           </div>
 
@@ -2334,7 +2334,7 @@ function App() {
                               max="50" 
                               value={parseInt(stylePadding) || 0} 
                               onChange={(e) => handleStyleChange('padding', `${e.target.value}px`)}
-                              className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                              className="w-full h-2 bg-slate-800 border border-slate-700/60 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                             />
                           </div>
 
@@ -2350,7 +2350,7 @@ function App() {
                               max="50" 
                               value={parseInt(styleMargin) || 0} 
                               onChange={(e) => handleStyleChange('margin', `${e.target.value}px`)}
-                              className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                              className="w-full h-2 bg-slate-800 border border-slate-700/60 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                             />
                           </div>
 
@@ -2358,7 +2358,7 @@ function App() {
                           <div className="space-y-2">
                             <div className="flex justify-between items-center text-[11px] text-slate-400">
                               <span>Genişlik (Width):</span>
-                              <div className="flex gap-1 bg-slate-950 p-0.5 rounded border border-slate-905 text-[9px]">
+                              <div className="flex gap-1 bg-slate-900 p-0.5 rounded border border-slate-700/60 text-[9px]">
                                 {['%', 'px', 'auto'].map((unit) => (
                                   <button
                                     key={unit}
@@ -2390,7 +2390,7 @@ function App() {
                                 step={widthUnit === '%' ? 1 : 5}
                                 value={parseInt(styleWidth) || (widthUnit === '%' ? 100 : 200)} 
                                 onChange={(e) => handleStyleChange('width', `${e.target.value}${widthUnit}`)}
-                                className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                                className="w-full h-2 bg-slate-800 border border-slate-700/60 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                               />
                             )}
                             
@@ -2400,7 +2400,7 @@ function App() {
                                 value={styleWidth}
                                 onChange={(e) => handleStyleChange('width', e.target.value)}
                                 placeholder="örn: 100%, 250px veya auto"
-                                className="flex-1 bg-slate-950 border border-slate-900 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-600 transition"
+                                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-600 transition"
                               />
                             </div>
                             
@@ -2438,7 +2438,7 @@ function App() {
                                 className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                                   styleWhiteSpace === 'nowrap' 
                                     ? 'bg-indigo-600 text-white shadow-sm' 
-                                    : 'bg-slate-950 border border-slate-900 text-slate-400 hover:text-slate-200'
+                                    : 'bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200'
                                 }`}
                                 title="Metnin alt satıra geçmesini engeller ve tek satırda tutar."
                               >
@@ -2451,7 +2451,7 @@ function App() {
                           </div>
 
                           {/* Color & Alignment */}
-                          <div className="flex items-center justify-between col-span-1 md:col-span-2 pt-3 border-t border-slate-900 text-xs">
+                          <div className="flex items-center justify-between col-span-1 md:col-span-2 pt-3 border-t border-slate-700/60 text-xs">
                             <div className="flex items-center gap-2">
                               <span>Yazı Rengi:</span>
                               <input 
@@ -2463,7 +2463,7 @@ function App() {
                               <span className="text-[10px] font-mono text-slate-500">{styleColor}</span>
                             </div>
 
-                            <div className="flex gap-1 bg-slate-900 p-1 rounded border border-slate-800">
+                            <div className="flex gap-1 bg-slate-900 p-1 rounded border border-slate-700/60">
                               {['left', 'center', 'right', 'justify'].map((align) => (
                                 <button
                                   key={align}
@@ -2480,27 +2480,27 @@ function App() {
 
                           {/* Border Presets (Only show for table cells/rows/tables) */}
                           {['td', 'th', 'tr', 'table', 'col'].includes(selectedElementDetails?.targetTagName) && (
-                            <div className="col-span-1 md:col-span-2 pt-3 border-t border-slate-900 text-xs">
+                            <div className="col-span-1 md:col-span-2 pt-3 border-t border-slate-700/60 text-xs">
                               <span className="text-[11px] text-slate-400 block mb-1.5 font-semibold">Hücre Kenarlık Ayarı:</span>
                               <div className="flex gap-1.5 flex-wrap">
                                 <button
                                   type="button"
                                   onClick={() => handleStyleChange('border', '')}
-                                  className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:border-slate-700 text-[10px] text-slate-300 hover:text-white rounded transition cursor-pointer"
+                                  className="px-2.5 py-1 bg-slate-800 border border-slate-700 hover:bg-slate-700 hover:border-slate-600 text-[10px] text-slate-300 hover:text-white rounded transition cursor-pointer"
                                 >
                                   Kenarlık Yok
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleStyleChange('border-bottom', '1px solid #e2e8f0')}
-                                  className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:border-slate-700 text-[10px] text-slate-300 hover:text-white rounded transition cursor-pointer"
+                                  className="px-2.5 py-1 bg-slate-800 border border-slate-700 hover:bg-slate-700 hover:border-slate-600 text-[10px] text-slate-300 hover:text-white rounded transition cursor-pointer"
                                 >
                                   Alt Çizgi (İnce)
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleStyleChange('border', '1px solid #e2e8f0')}
-                                  className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:border-slate-700 text-[10px] text-slate-300 hover:text-white rounded transition cursor-pointer"
+                                  className="px-2.5 py-1 bg-slate-800 border border-slate-700 hover:bg-slate-700 hover:border-slate-600 text-[10px] text-slate-300 hover:text-white rounded transition cursor-pointer"
                                 >
                                   Çerçeve
                                 </button>
@@ -2509,7 +2509,7 @@ function App() {
                           )}
 
                           {/* Actions: Add Inside, Edit Text or Remove Selected */}
-                          <div className="col-span-1 md:col-span-2 pt-4 border-t border-slate-900 flex flex-col gap-2.5">
+                          <div className="col-span-1 md:col-span-2 pt-4 border-t border-slate-700/60 flex flex-col gap-2.5">
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleAddTextElement(selectedSelector, selectedElementDetails)}
