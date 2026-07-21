@@ -610,6 +610,135 @@ export function updateWatermarkTextInXslt(xsltCode: string, newText: string): st
 }
 
 /**
+ * Bir XSLT görselinin base64 verisinden üretilecekWatermarkJSON'dur.
+ * Görsel gövdede tam ortalanmış, silüet (siyah + düşük opaklık) olarak konumlanır.
+ */
+export interface WatermarkOptions {
+  image: string;         // base64 data URI (örn. "data:image/png;base64,....")
+  size: number;           // fatura genişliğine göre yüzde (1-100)
+  opacity: number;        // 0-100 (silüet için düşük değer önerilir)
+  rotation: number;       // derece
+}
+
+const WATERMARK_START_MARKER = '<!-- uni-watermark-start -->';
+const WATERMARK_END_MARKER = '<!-- uni-watermark-end -->';
+
+function escapeForXmlAttribute(text: string): string {
+  return text
+    .replace(/&/g, '&')
+    .replace(/"/g, '"')
+    .replace(/</g, '<')
+    .replace(/>/g, '>');
+}
+
+function buildWatermarkBlock(opts: WatermarkOptions): string {
+  const { image, size, opacity, rotation } = opts;
+  const safeSize = Math.max(1, Math.min(100, Math.round(size)));
+  const safeOpacity = Math.max(0, Math.min(100, Math.round(opacity)));
+  const safeRotation = Math.round(rotation);
+  const overlayStyle = [
+    'position:absolute',
+    'top:0',
+    'left:0',
+    'width:100%',
+    'height:100%',
+    'display:flex',
+    'align-items:center',
+    'justify-content:center',
+    'pointer-events:none',
+    'z-index:9999',
+  ].join('; ');
+  const imgStyle = [
+    `width:${safeSize}%`,
+    'height:auto',
+    'max-height:100%',
+    'object-fit:contain',
+    `opacity:${(safeOpacity / 100).toFixed(2)}`,
+    `transform:rotate(${safeRotation}deg)`,
+    '-webkit-user-select:none',
+    'user-select:none',
+  ].join('; ');
+  const escapedImage = escapeForXmlAttribute(image);
+  return `${WATERMARK_START_MARKER}
+<div class="uni-watermark-overlay" style="${overlayStyle}">
+  <img src="${escapedImage}" alt="" style="${imgStyle}" />
+</div>
+${WATERMARK_END_MARKER}`;
+}
+
+/**
+ * Verilen XSLT içeriğine görsel filigran (silüet) ekler.
+ * `<body>` açılış etiketinden hemen sonra overlay div enjekte eder.
+ * Eğer body yoksa, `<html>` açılışından sonra ekler.
+ * Eğer zaten bir filigran bloğı varsa günceller (idempotent).
+ *
+ * XSLT koduna kalıcı olarak yazılır — kullanıcı düzenleyebilir.
+ */
+export function addWatermarkToXslt(xsltCode: string, opts: WatermarkOptions): string {
+  if (!xsltCode.trim() || !opts.image) return xsltCode;
+
+  try {
+    const block = buildWatermarkBlock(opts);
+    const startIdx = xsltCode.indexOf(WATERMARK_START_MARKER);
+    if (startIdx !== -1) {
+      const endIdx = xsltCode.indexOf(WATERMARK_END_MARKER, startIdx);
+      if (endIdx !== -1) {
+        const afterEnd = xsltCode.indexOf('>', endIdx);
+        const tail = afterEnd !== -1 ? xsltCode.substring(afterEnd + 1) : '';
+        return xsltCode.substring(0, startIdx) + block + tail;
+      }
+    }
+
+    // Body açılışını bul (multi-line attribute'lara dayanıklı regex)
+    const bodyMatch = xsltCode.match(/<body\b[^>]*>/i);
+    if (bodyMatch && bodyMatch.index !== undefined) {
+      const insertAt = bodyMatch.index + bodyMatch[0].length;
+      return xsltCode.substring(0, insertAt) + '\n' + block + xsltCode.substring(insertAt);
+    }
+
+    // Html açılışını bul (body yokken yedek)
+    const htmlMatch = xsltCode.match(/<html\b[^>]*>/i);
+    if (htmlMatch && htmlMatch.index !== undefined) {
+      const insertAt = htmlMatch.index + htmlMatch[0].length;
+      return xsltCode.substring(0, insertAt) + '\n' + block + xsltCode.substring(insertAt);
+    }
+
+    return xsltCode;
+  } catch (err) {
+    console.error('Failed to add watermark to XSLT', err);
+    return xsltCode;
+  }
+}
+
+/**
+ * XSLT içinden uni-watermark overlay bloğunu kaldırır.
+ * Marker comment'leriyle çevrelenmiş bloğu temizler.
+ */
+export function removeWatermarkFromXslt(xsltCode: string): string {
+  if (!xsltCode.trim()) return xsltCode;
+  try {
+    const startIdx = xsltCode.indexOf(WATERMARK_START_MARKER);
+    if (startIdx === -1) return xsltCode;
+    const endIdx = xsltCode.indexOf(WATERMARK_END_MARKER, startIdx);
+    if (endIdx === -1) return xsltCode;
+    const afterEnd = xsltCode.indexOf('>', endIdx);
+    const tail = afterEnd !== -1 ? xsltCode.substring(afterEnd + 1) : '';
+    return xsltCode.substring(0, startIdx) + tail.replace(/^\n+/, '');
+  } catch (err) {
+    console.error('Failed to remove watermark from XSLT', err);
+    return xsltCode;
+  }
+}
+
+/**
+ * XSLT içeriğinde şu anda bir filigran bloğu var mı kontrol eder.
+ */
+export function hasWatermarkInXslt(xsltCode: string): boolean {
+  if (!xsltCode.trim()) return false;
+  return xsltCode.indexOf(WATERMARK_START_MARKER) !== -1;
+}
+
+/**
  * XSLT içerisine yeni bir metin alanı ekler ve onun için CSS kuralı tanımlar.
  */
 export function addElementToXslt(
