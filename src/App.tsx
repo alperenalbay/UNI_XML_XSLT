@@ -26,7 +26,9 @@ import {
   LayoutGrid,
   Sliders,
   Edit3,
-  Wand2
+  Wand2,
+  Image as ImageIcon,
+  Move
 } from 'lucide-react'
 import { 
   transformXmlWithXslt, 
@@ -40,7 +42,14 @@ import {
   addElementToXslt,
   removeElementFromXslt,
   updateXsltTagAtLine,
-  findLineByXsltId
+  findLineByXsltId,
+  extractAllImagesFromXslt,
+  replaceImageInXslt,
+  addImageToXslt,
+  updateImageStyleInXslt,
+  getImageStyleFromXslt,
+  getImageTransformFromXslt,
+  setImageTransformInXslt
 } from './utils/xsltTransformer'
 import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 import { ToastContainer, useToast } from './components'
@@ -111,6 +120,17 @@ function App() {
   const [styleWhiteSpace, setStyleWhiteSpace] = useState<string>('normal')
   const [widthUnit, setWidthUnit] = useState<string>('%')
   const [selectedLineNumber, setSelectedLineNumber] = useState<number>(0)
+
+  // Image management state
+  const [designerImages, setDesignerImages] = useState<any[]>([])
+  const [expandedImageIdx, setExpandedImageIdx] = useState<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const replaceImageRef = useRef<{ src: string; index: number } | null>(null)
+  const [imageWidths, setImageWidths] = useState<Record<number, string>>({})
+  const [imageAligns, setImageAligns] = useState<Record<number, string>>({})
+  const [imageMargins, setImageMargins] = useState<Record<number, string>>({})
+  const [imageTransforms, setImageTransforms] = useState<Record<number, { x: number; y: number }>>({})
+  const [pendingTransforms, setPendingTransforms] = useState<Record<string, { x: number; y: number }>>({})
 
   const loadCustomTemplates = async () => {
     try {
@@ -224,6 +244,128 @@ function App() {
   useEffect(() => {
     checkUpdates()
   }, [])
+
+  // Scan XSLT for images when content changes
+  useEffect(() => {
+    const images = extractAllImagesFromXslt(xsltContent)
+    setDesignerImages(images)
+
+    const widths: Record<number, string> = {}
+    const aligns: Record<number, string> = {}
+    const margins: Record<number, string> = {}
+    images.forEach((img: any, i: number) => {
+      widths[i] = getImageStyleFromXslt(xsltContent, img.src, 'width') || '300px'
+      aligns[i] = getImageStyleFromXslt(xsltContent, img.src, 'text-align') || 'center'
+      margins[i] = getImageStyleFromXslt(xsltContent, img.src, 'margin') || '10px 0px'
+    })
+    setImageWidths(widths)
+    setImageAligns(aligns)
+    setImageMargins(margins)
+
+    const transforms: Record<number, { x: number; y: number }> = {}
+    images.forEach((img: any, i: number) => {
+      transforms[i] = getImageTransformFromXslt(xsltContent, img.src)
+    })
+    setImageTransforms(transforms)
+  }, [xsltContent])
+
+  // Handle file selection for image add/replace
+  const handleImageFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const validTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml']
+    if (!validTypes.includes(file.type)) {
+      addToast({ type: 'error', message: 'Geçersiz Format', description: 'PNG, JPEG, GIF, WebP veya SVG dosyası seçin.' })
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const dataUri = ev.target?.result as string
+      if (!dataUri) return
+
+      if (replaceImageRef.current) {
+        const oldSrc = replaceImageRef.current.src
+        const updated = replaceImageInXslt(xsltContent, oldSrc, dataUri)
+        if (updated !== xsltContent) {
+          updateXsltContent(updated)
+          setPendingTransforms(prev => {
+            const next = { ...prev }
+            delete next[oldSrc]
+            return next
+          })
+          addToast({ type: 'success', message: 'Görsel Değiştirildi', description: 'Görsel başarıyla güncellendi.' })
+        }
+        replaceImageRef.current = null
+      } else {
+        const updated = addImageToXslt(xsltContent, dataUri, file.name)
+        if (updated !== xsltContent) {
+          updateXsltContent(updated)
+          addToast({ type: 'success', message: 'Görsel Eklendi', description: 'Yeni görsel tasarıma eklendi.' })
+        }
+      }
+    }
+    reader.readAsDataURL(file)
+
+    e.target.value = ''
+  }
+
+  const handleReplaceImage = (image: any) => {
+    replaceImageRef.current = { src: image.src, index: image.index }
+    fileInputRef.current?.click()
+  }
+
+  const handleApplyImageTransforms = () => {
+    const entries = Object.entries(pendingTransforms)
+    if (entries.length === 0) return
+
+    let currentXslt = xsltContent
+    for (const [src, pos] of entries) {
+      const updated = setImageTransformInXslt(currentXslt, src, pos.x, pos.y)
+      if (updated !== currentXslt) currentXslt = updated
+    }
+
+    if (currentXslt !== xsltContent) {
+      updateXsltContent(currentXslt)
+      const result = transformXmlWithXslt(xmlContent, currentXslt)
+      if (!result.error) setHtmlOutput(result.html)
+
+      const newTransforms: Record<number, { x: number; y: number }> = {}
+      designerImages.forEach((img: any, i: number) => {
+        const pend = pendingTransforms[img.src]
+        if (pend) newTransforms[i] = pend
+        else newTransforms[i] = imageTransforms[i] || { x: 0, y: 0 }
+      })
+      setImageTransforms(newTransforms)
+      setPendingTransforms({})
+
+      addToast({ type: 'success', message: 'Değişiklikler Kaydedildi', description: `${entries.length} görsel konumu XSLT'ye uygulandı.` })
+    }
+  }
+
+  const handleResetImageTransforms = () => {
+    setPendingTransforms({})
+    const result = transformXmlWithXslt(xmlContent, xsltContent)
+    if (!result.error) setHtmlOutput(result.html)
+  }
+
+  const handleAddImage = () => {
+    replaceImageRef.current = null
+    fileInputRef.current?.click()
+  }
+
+  const handleImageStyleChange = (idx: number, imgSrc: string, property: string, value: string) => {
+    const updated = updateImageStyleInXslt(xsltContent, imgSrc, property, value)
+    if (updated !== xsltContent) {
+      updateXsltContent(updated)
+      if (property === 'width' || property === 'max-width') setImageWidths(prev => ({ ...prev, [idx]: value }))
+      else if (property === 'text-align') setImageAligns(prev => ({ ...prev, [idx]: value }))
+      else if (property === 'margin') setImageMargins(prev => ({ ...prev, [idx]: value }))
+      const result = transformXmlWithXslt(xmlContent, updated)
+      if (!result.error) setHtmlOutput(result.html)
+    }
+  }
 
   // Drag & Drop / Banner state (Zustand state references)
 
@@ -705,6 +847,102 @@ function App() {
       }
     }
 
+    // Ensure body is relatively positioned for drag mode
+    if (editorActiveTab === 'imag-editor' && rawHtml) {
+      rawHtml = rawHtml.replace(/<body\b[^>]*>/i, (m) => {
+        if (m.includes('style=')) {
+          return m.replace(/style\s*=\s*["']([^"']*)["']/i, (_, s) => `style="${s}; position: relative;"`);
+        }
+        return m.replace('>', ' style="position: relative;">');
+      });
+    }
+
+    // Add data-image-index to all img tags for robust drag tracking
+    if (editorActiveTab === 'imag-editor' && rawHtml) {
+      let imgCounter = 0;
+      rawHtml = rawHtml.replace(/<img\b/gi, () => `<img data-image-index="${imgCounter++}"`);
+    }
+
+    // Image drag script for visual editor mode
+    if (editorActiveTab === 'imag-editor') {
+      const dragScript = `
+<script id="uni-image-drag">
+(function() {
+  console.log('[uni-image-drag] Script loaded, injecting event listeners');
+
+  var activeImg = null, startX = 0, startY = 0, origX = 0, origY = 0, imgSrc = '', imgIndex = -1;
+
+  function getTranslate(el) {
+    var s = el.style.transform || '';
+    var m = s.match(/translate\\(([-\\d.]+)px,\\s*([-\\d.]+)px\\)/);
+    return m ? [parseFloat(m[1])||0, parseFloat(m[2])||0] : [0,0];
+  }
+
+  document.addEventListener('mousedown', function(e) {
+    var target = e.target;
+    if (target.tagName.toLowerCase() !== 'img') return;
+    if (target.closest('.uni-watermark-overlay, .uni-watermark-preview-overlay')) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    activeImg = target;
+    startX = e.clientX;
+    startY = e.clientY;
+    var t = getTranslate(target);
+    origX = t[0];
+    origY = t[1];
+    imgSrc = target.getAttribute('src') || '';
+    imgIndex = target.getAttribute('data-image-index');
+    imgIndex = imgIndex !== null ? parseInt(imgIndex, 10) : -1;
+
+    console.log('[uni-image-drag] mousedown', { imgSrc: imgSrc ? imgSrc.substring(0,80)+'...' : '(empty)', imgIndex, origX, origY, startX, startY });
+
+    target.style.cursor = 'grabbing';
+    target.style.transition = 'none';
+    target.style.zIndex = '999';
+    target.style.boxShadow = '0 0 0 2px #10b981, 0 8px 24px rgba(0,0,0,0.3)';
+    target.style.borderRadius = '4px';
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!activeImg) return;
+    e.preventDefault();
+    var dx = e.clientX - startX + origX;
+    var dy = e.clientY - startY + origY;
+    activeImg.style.transform = 'translate(' + Math.round(dx) + 'px, ' + Math.round(dy) + 'px)';
+  });
+
+  document.addEventListener('mouseup', function(e) {
+    if (!activeImg) return;
+    activeImg.style.cursor = '';
+    activeImg.style.transition = '';
+    activeImg.style.zIndex = '';
+    activeImg.style.boxShadow = '';
+    activeImg.style.borderRadius = '';
+
+    var dx = e.clientX - startX + origX;
+    var dy = e.clientY - startY + origY;
+    var finalX = Math.round(dx);
+    var finalY = Math.round(dy);
+
+    console.log('[uni-image-drag] mouseup', { imgSrc: imgSrc ? imgSrc.substring(0,80)+'...' : '(empty)', imgIndex, origX, origY, finalX, finalY, moved: (finalX !== origX || finalY !== origY) });
+
+    if (finalX !== origX || finalY !== origY) {
+      window.parent.postMessage({
+        source: 'xslt-image-drag',
+        imgSrc: imgSrc,
+        imageIndex: imgIndex,
+        x: finalX,
+        y: finalY
+      }, '*');
+    }
+    activeImg = null;
+  });
+})();
+</script>`;
+      rawHtml = rawHtml.replace('</head>', dragScript + '</head>');
+    }
+
     // Live preview watermark overlay (in-memory only — not written to XSLT unless user clicks "XSLT'ye Kaydet")
     if (watermarkVisible && watermarkImage) {
       const safeSize = Math.max(1, Math.min(100, Math.round(watermarkSize)));
@@ -741,7 +979,7 @@ function App() {
     }
 
     return rawHtml || '<p style="padding: 20px; color: #64748b; font-family: sans-serif; text-align: center;">Dönüştürülmüş fatura görüntüsü burada görüntülenecektir.</p>';
-  }, [htmlOutput, errorMsg, inspectorActive, designerActive, showTableBorders, watermarkVisible, watermarkImage, watermarkSize, watermarkOpacity, watermarkRotation])
+  }, [htmlOutput, errorMsg, inspectorActive, designerActive, showTableBorders, watermarkVisible, watermarkImage, watermarkSize, watermarkOpacity, watermarkRotation, editorActiveTab])
 
   // Attach event listeners and apply layout sizing inside the iframe document on load
   const handleIframeLoad = () => {
@@ -799,6 +1037,10 @@ function App() {
       innerDoc.body.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4)'
       innerDoc.body.style.backgroundColor = '#ffffff'
       innerDoc.body.style.transition = 'transform 0.15s ease-out'
+
+      if (editorActiveTab === 'imag-editor') {
+        innerDoc.body.style.position = 'relative';
+      }
     }
     
     const htmlEl = innerDoc.documentElement
@@ -1104,6 +1346,20 @@ function App() {
             setInspectorStatus(`Sütun genişliği ayarlandı: ${widthPct}`);
             setTimeout(() => setInspectorStatus(null), 3000);
           }
+        }
+        return;
+      }
+
+      // Case: Image drag from Görsel Düzenleyici - only track pending, don't save yet
+      if (source === 'xslt-image-drag') {
+        const { imgSrc: dragSrc, imageIndex, x: newX, y: newY } = event.data;
+        let key = dragSrc;
+        if (imageIndex >= 0 && imageIndex < designerImages.length && designerImages[imageIndex].src) {
+          key = designerImages[imageIndex].src;
+        }
+        if (key) {
+          console.log('[handleInspectorMessage] xslt-image-drag received', { dragSrc: dragSrc?.substring(0,60), imageIndex, resolvedKey: key?.substring(0,60), x: newX, y: newY });
+          setPendingTransforms(prev => ({ ...prev, [key]: { x: newX, y: newY } }));
         }
         return;
       }
@@ -2115,6 +2371,20 @@ function App() {
                 <LayoutGrid className="h-3.5 w-3.5 text-purple-400 animate-pulse" />
                 Görsel Tasarımcı (Beta)
               </button>
+              <button
+                onClick={() => {
+                  setEditorActiveTab('imag-editor')
+                  setDesignerActive(false)
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition duration-150 cursor-pointer ${
+                  editorActiveTab === 'imag-editor'
+                    ? 'bg-slate-800 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Move className="h-3.5 w-3.5 text-emerald-400" />
+                Görsel Düzenleyici
+              </button>
             </div>
 
             {/* Layout Toggle and Editor Actions */}
@@ -2564,11 +2834,354 @@ function App() {
                   <WatermarkPanel />
                 </div>
 
+                {/* Card 8: Tasarımdaki Görseller */}
+                <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
+                    <ImageIcon className="h-4 w-4 text-emerald-400" />
+                    Tasarımdaki Görseller
+                  </h4>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                    onChange={handleImageFileSelected}
+                    className="hidden"
+                  />
+
+                  {designerImages.length === 0 ? (
+                    <div className="flex items-center gap-3 p-4 bg-slate-900/20 border border-dashed border-slate-800 rounded-xl">
+                      <div className="p-2.5 bg-emerald-500/10 rounded-lg text-emerald-400">
+                        <ImageIcon className="h-5 w-5" />
+                      </div>
+                      <p className="text-xs text-slate-500 leading-normal">
+                        Tasarımda henüz görsel bulunamadı. Aşağıdaki butonu kullanarak yeni bir görsel ekleyebilirsiniz.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {designerImages.map((img, idx) => {
+                        const isExpanded = expandedImageIdx === idx
+                        const imgW = imageWidths[idx] || '300px'
+                        const imgAlign = imageAligns[idx] || 'center'
+                        const imgMargin = imageMargins[idx] || '10px 0px'
+                        const wNum = parseInt(imgW) || 300
+                        return (
+                          <div key={idx} className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+                            <div className="flex items-center gap-3 p-3">
+                              <div className="w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center">
+                                {img.isBase64 ? (
+                                  <img src={img.src} alt={img.alt || 'görsel'} className="w-full h-full object-contain" />
+                                ) : (
+                                  <div className="text-[9px] text-slate-500 text-center p-1 leading-tight">
+                                    <ImageIcon className="h-5 w-5 mx-auto mb-1 opacity-50" />
+                                    Dış Kaynak
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-slate-300 font-medium truncate">
+                                  {img.alt || `Görsel ${idx + 1}`}
+                                </p>
+                                <p className="text-[9px] text-slate-600 font-mono truncate mt-0.5">
+                                  {img.isBase64 ? `base64 (${Math.round(img.src.length * 0.75)} bayt)` : img.src.substring(0, 40) + '...'}
+                                </p>
+                                {img.className && (
+                                  <p className="text-[9px] text-indigo-500/70 font-mono mt-0.5">.{img.className}</p>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleReplaceImage(img)}
+                                className="shrink-0 px-3 py-1.5 bg-amber-950 hover:bg-amber-900 border border-amber-900/60 hover:border-amber-700 text-[10px] font-bold text-amber-300 rounded-lg transition cursor-pointer"
+                              >
+                                Değiştir
+                              </button>
+                              <button
+                                onClick={() => setExpandedImageIdx(isExpanded ? null : idx)}
+                                className={`shrink-0 p-1.5 rounded-lg text-[10px] transition cursor-pointer ${
+                                  isExpanded ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-white'
+                                }`}
+                              >
+                                <Sliders className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+
+                            {isExpanded && (
+                              <div className="px-3 pb-3 pt-0 border-t border-slate-800 mt-2 space-y-3">
+                                {/* Width */}
+                                <div className="pt-2 space-y-1">
+                                  <div className="flex justify-between text-[10px] text-slate-400">
+                                    <span>Genişlik:</span>
+                                    <span className="font-mono text-white">{imgW}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="range"
+                                      min="20"
+                                      max="794"
+                                      value={wNum}
+                                      onChange={(e) => handleImageStyleChange(idx, img.src, 'width', `${e.target.value}px`)}
+                                      className="flex-1 h-2 bg-slate-800 border border-slate-700/60 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={imgW}
+                                      onChange={(e) => handleImageStyleChange(idx, img.src, 'width', e.target.value)}
+                                      className="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-white font-mono text-center focus:outline-none focus:border-emerald-600"
+                                    />
+                                  </div>
+                                  <div className="flex gap-1 flex-wrap">
+                                    {['100px', '200px', '300px', '500px', '100%', '50%'].map((preset) => (
+                                      <button
+                                        key={preset}
+                                        onClick={() => handleImageStyleChange(idx, img.src, 'width', preset)}
+                                        className={`px-2 py-0.5 text-[9px] rounded transition cursor-pointer ${
+                                          imgW === preset ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                                        }`}
+                                      >
+                                        {preset}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {/* Alignment & Float */}
+                                <div className="space-y-1">
+                                  <span className="text-[10px] text-slate-400 block">Hizalama / Konum:</span>
+                                  <div className="flex flex-wrap gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                                    {[
+                                      { key: 'left', label: 'Sol' },
+                                      { key: 'center', label: 'Orta' },
+                                      { key: 'right', label: 'Sağ' }
+                                    ].map((a) => (
+                                      <button
+                                        key={a.key}
+                                        onClick={() => handleImageStyleChange(idx, img.src, 'text-align', a.key)}
+                                        className={`px-3 py-1 rounded text-[9px] font-bold uppercase transition cursor-pointer ${
+                                          imgAlign === a.key ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                                        }`}
+                                      >
+                                        {a.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  <div className="flex gap-1 flex-wrap mt-1">
+                                    {[
+                                      { key: 'left', label: 'Float Sol' },
+                                      { key: 'right', label: 'Float Sağ' },
+                                      { key: 'none', label: 'Float Yok' }
+                                    ].map((f) => (
+                                      <button
+                                        key={f.key}
+                                        onClick={() => handleImageStyleChange(idx, img.src, 'float', f.key)}
+                                        className={`px-2 py-0.5 text-[9px] rounded transition cursor-pointer ${
+                                          (img.currentFloat === f.key) ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                                        }`}
+                                      >
+                                        {f.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {/* Margin */}
+                                <div className="space-y-1">
+                                  <div className="flex justify-between text-[10px] text-slate-400">
+                                    <span>Dış Boşluk (Margin):</span>
+                                    <span className="font-mono text-white">{imgMargin}</span>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={imgMargin}
+                                    onChange={(e) => handleImageStyleChange(idx, img.src, 'margin', e.target.value)}
+                                    placeholder="örn: 10px 0px"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-600 transition"
+                                  />
+                                  <div className="flex gap-1 flex-wrap">
+                                    {['0px', '5px 0px', '10px 0px', '20px 0px', '5px auto', '0px auto'].map((preset) => (
+                                      <button
+                                        key={preset}
+                                        onClick={() => handleImageStyleChange(idx, img.src, 'margin', preset)}
+                                        className={`px-2 py-0.5 text-[9px] rounded transition cursor-pointer ${
+                                          imgMargin === preset ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                                        }`}
+                                      >
+                                        {preset}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {/* Display mode */}
+                                <div className="space-y-1">
+                                  <span className="text-[10px] text-slate-400 block">Görüntüleme:</span>
+                                  <div className="flex gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 w-fit">
+                                    {[
+                                      { key: 'inline-block', label: 'Akış' },
+                                      { key: 'block', label: 'Blok' },
+                                      { key: 'inline', label: 'Satır İçi' }
+                                    ].map((d) => (
+                                      <button
+                                        key={d.key}
+                                        onClick={() => handleImageStyleChange(idx, img.src, 'display', d.key)}
+                                        className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition cursor-pointer ${
+                                          d.key === 'inline-block' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                                        }`}
+                                      >
+                                        {d.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleAddImage}
+                    className="w-full py-2.5 px-4 bg-emerald-950 hover:bg-emerald-900 border border-emerald-900/60 hover:border-emerald-700 text-xs font-bold text-emerald-300 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Yeni Görsel Ekle
+                  </button>
+                </div>
+
                 <div className="mt-8 pt-4 border-t border-slate-900 text-xs text-slate-500 flex items-center justify-between">
                   <span>💡 İpucu: Önizlemedeki herhangi bir yazıya <b>çift tıklayarak</b> içeriğini doğrudan değiştirebilirsiniz.</span>
                   <span>Düzenlenen Selector: {selectedSelector || 'Yok'}</span>
                 </div>
 
+              </div>
+            ) : editorActiveTab === 'imag-editor' ? (
+              <div className="flex-1 flex flex-col min-h-0 bg-slate-950 p-6 overflow-y-auto scrollbar-thin text-slate-300 select-none">
+                <div className="border-b border-slate-900 pb-4 mb-6">
+                  <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                    <Move className="h-5 w-5 text-emerald-400" />
+                    Görsel Düzenleyici (Sürükle-Bırak)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Sağ taraftaki fatura önizlemesinde görselleri fare ile sürükleyerek konumlandırın. Değişiklikler otomatik olarak XSLT koduna yansıtılır.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="bg-slate-800/70 border border-slate-700/60 rounded-xl p-4 space-y-3 shadow-lg shadow-black/20">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-700/60 pb-2">
+                      <ImageIcon className="h-4 w-4 text-emerald-400" />
+                      Tasarımdaki Görseller
+                    </h4>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                      onChange={handleImageFileSelected}
+                      className="hidden"
+                    />
+
+                    {designerImages.length === 0 ? (
+                      <div className="flex items-center gap-3 p-4 bg-slate-900/20 border border-dashed border-slate-800 rounded-xl">
+                        <div className="p-2.5 bg-emerald-500/10 rounded-lg text-emerald-400">
+                          <ImageIcon className="h-5 w-5" />
+                        </div>
+                        <p className="text-xs text-slate-500 leading-normal">
+                          Tasarımda henüz görsel bulunamadı. Yeni bir görsel eklemek için aşağıdaki butonu kullanın, ardından önizlemede sürükleyerek konumlandırın.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {designerImages.map((img, idx) => {
+                          const saved = imageTransforms[idx] || { x: 0, y: 0 }
+                          const pending = pendingTransforms[img.src]
+                          const active = pending || saved
+                          const hasPending = !!pending
+                          return (
+                            <div key={idx} className={`flex items-center gap-3 p-3 bg-slate-900/60 border rounded-xl ${hasPending ? 'border-amber-600/60' : 'border-slate-800'}`}>
+                              <div className="w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center">
+                                {img.isBase64 ? (
+                                  <img src={img.src} alt={img.alt || ''} className="w-full h-full object-contain" />
+                                ) : (
+                                  <div className="text-[9px] text-slate-500 text-center p-1"><ImageIcon className="h-5 w-5 opacity-50" /></div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-slate-300 font-medium truncate">{img.alt || `Görsel ${idx + 1}`}</p>
+                                <p className="text-[9px] text-slate-600 font-mono mt-0.5">
+                                  Konum: X:{active.x}px Y:{active.y}px
+                                  {hasPending && <span className="text-amber-400 ml-1">(bekliyor)</span>}
+                                </p>
+                              </div>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => setPendingTransforms(prev => {
+                                    const next = { ...prev }
+                                    delete next[img.src]
+                                    return next
+                                  })}
+                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] text-slate-400 rounded transition cursor-pointer"
+                                >
+                                  Sıfırla
+                                </button>
+                                <button
+                                  onClick={() => handleReplaceImage(img)}
+                                  className="px-2 py-1 bg-amber-950 hover:bg-amber-900 border border-amber-900/60 text-[10px] font-bold text-amber-300 rounded transition cursor-pointer"
+                                >
+                                  Değiştir
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleApplyImageTransforms}
+                        disabled={Object.keys(pendingTransforms).length === 0}
+                        className={`flex-1 py-2.5 px-4 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          Object.keys(pendingTransforms).length > 0
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
+                            : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                        }`}
+                      >
+                        <Check className="h-4 w-4" />
+                        Değişiklikleri Kaydet ({Object.keys(pendingTransforms).length})
+                      </button>
+                      <button
+                        onClick={handleResetImageTransforms}
+                        disabled={Object.keys(pendingTransforms).length === 0}
+                        className={`py-2.5 px-4 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          Object.keys(pendingTransforms).length > 0
+                            ? 'bg-rose-950 hover:bg-rose-900 border border-rose-900/50 text-rose-300'
+                            : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                        }`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={handleAddImage}
+                      className="w-full py-2.5 px-4 bg-emerald-950 hover:bg-emerald-900 border border-emerald-900/60 hover:border-emerald-700 text-xs font-bold text-emerald-300 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Yeni Görsel Ekle
+                    </button>
+                  </div>
+
+                  <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4">
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      <b className="text-amber-400">Kullanım:</b> Sağ taraftaki önizlemede görselleri fare ile sürükleyin. Tüm değişiklikler
+                      <b className="text-emerald-400"> "Kaydet" </b> butonuna basana kadar bekletilir. İptal etmek için 
+                      <b className="text-rose-400"> çöp kutusu </b> butonuna basın.
+                    </p>
+                  </div>
+                </div>
               </div>
             ) : editorLayout === 'tabbed' ? (
               // TABBED LAYOUT (Preserves editor state and ref using hidden class)

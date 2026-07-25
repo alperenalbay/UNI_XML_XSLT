@@ -1261,6 +1261,304 @@ function updateAttributesInTagString(tagString: string, property: string, value:
   }
 }
 
+export interface ImageInfo {
+  src: string;
+  alt: string;
+  className: string;
+  xsltId: string;
+  index: number;
+  isBase64: boolean;
+  previewSrc: string;
+  wrapperClass: string;
+  currentWidth: string;
+  currentAlign: string;
+  currentMargin: string;
+  currentFloat: string;
+}
+
+function parseImgStyle(styleStr: string, property: string): string {
+  if (!styleStr || !property) return '';
+  const regex = new RegExp(`${property}\\s*:\\s*([^;]+)`, 'i');
+  const match = styleStr.match(regex);
+  return match ? match[1].trim() : '';
+}
+
+function parseWrapperStyle(xsltCode: string, imgSrc: string, property: string): string {
+  const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const wrapperMatch = xsltCode.match(new RegExp(`<div[^>]*>\\s*<img[^>]*src\\s*=\\s*["']${escapedSrc}["']`, 'i'));
+  if (!wrapperMatch) return '';
+  const wrapperStart = wrapperMatch[0];
+  const styleMatch = wrapperStart.match(/style\s*=\s*["']([^"']*)["']/i);
+  if (styleMatch) {
+    return parseImgStyle(styleMatch[1], property);
+  }
+  return '';
+}
+
+function updateImgStyleInTag(tagContent: string, property: string, value: string): string {
+  const styleMatch = tagContent.match(/style\s*=\s*["']([^"']*)["']/i);
+  const fullStyleAttr = styleMatch ? styleMatch[0] : '';
+  const currentStyle = styleMatch ? styleMatch[1] : '';
+
+  const props = currentStyle.split(';').filter(Boolean).map(s => s.trim());
+  const newProps: string[] = [];
+  let found = false;
+
+  props.forEach(p => {
+    const parts = p.split(':');
+    const key = parts[0]?.trim().toLowerCase();
+    if (key === property.toLowerCase()) {
+      newProps.push(`${property}: ${value}`);
+      found = true;
+    } else {
+      newProps.push(p);
+    }
+  });
+
+  if (!found) {
+    newProps.push(`${property}: ${value}`);
+  }
+
+  const newStyle = newProps.join('; ');
+  const newStyleAttr = `style="${newStyle}"`;
+
+  if (fullStyleAttr) {
+    return tagContent.replace(fullStyleAttr, newStyleAttr);
+  } else {
+    return tagContent + ' ' + newStyleAttr;
+  }
+}
+
+function updateImgTagBySrc(xsltCode: string, imgSrc: string, property: string, value: string): string {
+  const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const imgRegex = new RegExp(`(<img\\b[^>]*src\\s*=\\s*["']${escapedSrc}["'][^>]*)(/?>)`, 'i');
+  return xsltCode.replace(imgRegex, (_match, before, closing) => {
+    const updatedBefore = updateImgStyleInTag(before, property, value);
+    return updatedBefore + closing;
+  });
+}
+
+function updateWrapperDivByImgSrc(xsltCode: string, imgSrc: string, property: string, value: string): string {
+  const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const wrapperRegex = new RegExp(`(<div\\b[^>]*>)\\s*\\n?\\s*(<img\\b[^>]*src\\s*=\\s*["']${escapedSrc}["'][^>]*/?>)`, 'i');
+  return xsltCode.replace(wrapperRegex, (_match, divOpen, imgTag) => {
+    const updatedDiv = updateImgStyleInTag(divOpen, property, value);
+    return updatedDiv + '\n' + imgTag;
+  });
+}
+
+export function extractAllImagesFromXslt(xsltCode: string): ImageInfo[] {
+  if (!xsltCode.trim()) return [];
+  const results: ImageInfo[] = [];
+  let index = 0;
+
+  const imgRegex = /<img\b([^>]*?)>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = imgRegex.exec(xsltCode)) !== null) {
+    const tagContent = match[1];
+    const srcMatch = tagContent.match(/src\s*=\s*["']([^"']*)["']/i);
+    const altMatch = tagContent.match(/alt\s*=\s*["']([^"']*)["']/i);
+    const classMatch = tagContent.match(/class\s*=\s*["']([^"']*)["']/i);
+    const xsltIdMatch = tagContent.match(/data-xslt-id\s*=\s*["']([^"']*)["']/i);
+    const styleStr = tagContent.match(/style\s*=\s*["']([^"']*)["']/i);
+
+    const src = srcMatch ? srcMatch[1] : '';
+    const alt = altMatch ? altMatch[1] : '';
+    const className = classMatch ? classMatch[1] : '';
+    const xsltId = xsltIdMatch ? xsltIdMatch[1] : '';
+    const isBase64 = src.startsWith('data:image/');
+    const styleText = styleStr ? styleStr[1] : '';
+
+    let previewSrc = src;
+    if (isBase64 && src.length > 200) {
+      previewSrc = src.substring(0, 100) + '...' + src.slice(-20);
+    }
+
+    const currentWidth = parseImgStyle(styleText, 'width') || parseImgStyle(styleText, 'max-width') || '300px';
+    const currentFloat = parseImgStyle(styleText, 'float') || 'none';
+
+    const wrapperStyle = parseWrapperStyle(xsltCode, src, 'text-align');
+    const wrapperMargin = parseWrapperStyle(xsltCode, src, 'margin');
+    const wrapperFloat = parseWrapperStyle(xsltCode, src, 'float');
+
+    const wrapperClassMatch = xsltCode.match(new RegExp(`<div\\b([^>]*)>\\s*<img[^>]*src\\s*=\\s*["']${src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`, 'i'));
+    const wrapperClass = wrapperClassMatch?.[1]?.match(/class\s*=\s*["']([^"']*)["']/i)?.[1] || '';
+
+    results.push({
+      src, alt, className, xsltId, index, isBase64, previewSrc,
+      wrapperClass,
+      currentWidth,
+      currentAlign: wrapperStyle || 'center',
+      currentMargin: wrapperMargin || '10px 0px',
+      currentFloat: wrapperFloat || currentFloat
+    });
+    index++;
+  }
+
+  return results;
+}
+
+export function replaceImageInXslt(xsltCode: string, oldSrc: string, newSrc: string): string {
+  if (!xsltCode.trim() || !oldSrc || !newSrc) return xsltCode;
+  try {
+    const escapedOld = oldSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escapedOld, 'g');
+    return xsltCode.replace(regex, newSrc);
+  } catch (err) {
+    console.error('Failed to replace image in XSLT', err);
+    return xsltCode;
+  }
+}
+
+export function addImageToXslt(xsltCode: string, src: string, alt: string): string {
+  if (!xsltCode.trim() || !src) return xsltCode;
+  try {
+    const uniqueId = Date.now();
+    const imgTag = `<div style="text-align: center; margin: 10px 0px; padding: 0px;">
+  <img src="${escapeForXmlAttribute(src)}" alt="${escapeForXmlAttribute(alt || '')}" style="max-width: 100%; width: 300px; height: auto; display: inline-block;" />
+</div>`;
+
+    const bodyMatch = xsltCode.match(/<body\b[^>]*>/i);
+    if (bodyMatch && bodyMatch.index !== undefined) {
+      const insertAt = bodyMatch.index + bodyMatch[0].length;
+      const afterBody = xsltCode.substring(insertAt).trimStart();
+      const indent = afterBody.startsWith('\n') ? '' : '\n';
+      return xsltCode.substring(0, insertAt) + indent + imgTag + '\n' + afterBody;
+    }
+
+    const htmlMatch = xsltCode.match(/<html\b[^>]*>/i);
+    if (htmlMatch && htmlMatch.index !== undefined) {
+      const insertAt = htmlMatch.index + htmlMatch[0].length;
+      return xsltCode.substring(0, insertAt) + '\n' + imgTag + xsltCode.substring(insertAt);
+    }
+
+    return xsltCode;
+  } catch (err) {
+    console.error('Failed to add image to XSLT', err);
+    return xsltCode;
+  }
+}
+
+export function updateImageStyleInXslt(xsltCode: string, imgSrc: string, property: string, value: string): string {
+  if (!xsltCode.trim() || !imgSrc || !property) return xsltCode;
+  try {
+    const imgProps = ['width', 'max-width', 'height', 'display', 'float'];
+    const wrapperProps = ['text-align', 'margin', 'padding', 'float'];
+
+    if (wrapperProps.includes(property)) {
+      const result = updateWrapperDivByImgSrc(xsltCode, imgSrc, property, value);
+      if (result !== xsltCode) return result;
+    }
+
+    if (imgProps.includes(property)) {
+      const result = updateImgTagBySrc(xsltCode, imgSrc, property, value);
+      if (result !== xsltCode) return result;
+    }
+
+    return xsltCode;
+  } catch (err) {
+    console.error('Failed to update image style in XSLT', err);
+    return xsltCode;
+  }
+}
+
+export function getImageStyleFromXslt(xsltCode: string, imgSrc: string, property: string): string {
+  if (!xsltCode.trim() || !imgSrc || !property) return '';
+  try {
+    const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const imgMatch = xsltCode.match(new RegExp(`<img\\b[^>]*src\\s*=\\s*["']${escapedSrc}["'][^>]*>`, 'i'));
+    if (!imgMatch) return '';
+
+    const tagContent = imgMatch[0];
+    const styleMatch = tagContent.match(/style\s*=\s*["']([^"']*)["']/i);
+    if (styleMatch) {
+      const val = parseImgStyle(styleMatch[1], property);
+      if (val) return val;
+    }
+
+    const imgProps = ['width', 'max-width', 'height', 'display', 'float'];
+    const wrapperProps = ['text-align', 'margin', 'padding'];
+
+    if (wrapperProps.includes(property)) {
+      return parseWrapperStyle(xsltCode, imgSrc, property);
+    }
+
+    return '';
+  } catch (err) {
+    console.error('Failed to get image style from XSLT', err);
+    return '';
+  }
+}
+
+export function getImageTransformFromXslt(xsltCode: string, imgSrc: string): { x: number; y: number } {
+  if (!xsltCode.trim() || !imgSrc) return { x: 0, y: 0 };
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xsltCode, 'application/xml');
+    if (doc.querySelector('parsererror')) return { x: 0, y: 0 };
+
+    const imgEls = doc.querySelectorAll('img[src]');
+    for (const el of imgEls) {
+      if (el.getAttribute('src') === imgSrc) {
+        const style = el.getAttribute('style') || '';
+        const m = style.match(/transform\s*:\s*translate\s*\(\s*([-\d.]+)px\s*,\s*([-\d.]+)px\s*\)/i);
+        if (m) return { x: parseFloat(m[1]) || 0, y: parseFloat(m[2]) || 0 };
+        return { x: 0, y: 0 };
+      }
+    }
+    return { x: 0, y: 0 };
+  } catch {
+    return { x: 0, y: 0 };
+  }
+}
+
+export function setImageTransformInXslt(xsltCode: string, imgSrc: string, x: number, y: number): string {
+  if (!xsltCode.trim() || !imgSrc) return xsltCode;
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xsltCode, 'application/xml');
+    if (doc.querySelector('parsererror')) {
+      console.warn('XSLT parse error in setImageTransform');
+      return xsltCode;
+    }
+
+    const imgEls = doc.querySelectorAll('img[src]');
+    let target: Element | null = null;
+    for (const el of imgEls) {
+      if (el.getAttribute('src') === imgSrc) {
+        target = el;
+        break;
+      }
+    }
+
+    if (!target) return xsltCode;
+
+    const translateVal = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+    const currentStyle = target.getAttribute('style') || '';
+
+    const styles: Record<string, string> = {};
+    currentStyle.split(';').forEach(pair => {
+      const parts = pair.split(':');
+      if (parts.length >= 2) {
+        styles[parts[0].trim().toLowerCase()] = parts.slice(1).join(':').trim();
+      }
+    });
+
+    styles['transform'] = translateVal;
+    styles['position'] = 'relative';
+    styles['z-index'] = '10';
+
+    const newStyle = Object.entries(styles).map(([k, v]) => `${k}: ${v}`).join('; ');
+    target.setAttribute('style', newStyle + ';');
+
+    return new XMLSerializer().serializeToString(doc);
+  } catch (err) {
+    console.error('Failed to set image transform in XSLT', err);
+    return xsltCode;
+  }
+}
+
 /**
  * XSLT ID'sini (data-xslt-id) barındıran öğeyi DOM üzerinden bulup,
  * o öğenin Monaco editöründeki satır numarasını bulur.
