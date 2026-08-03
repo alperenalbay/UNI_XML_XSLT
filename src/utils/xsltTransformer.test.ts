@@ -161,6 +161,71 @@ describe('xsltTransformer', () => {
       const result = removeElementFromXslt(xslt, '.other-class', { xsltId: '999' });
       expect(result).toContain('Item 2');
     });
+
+    it('should remove the n-th img by imageIndex (not the first img)', () => {
+      const xsltWithImages = `<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <html>
+      <body>
+        <img src="data:image/png;base64,AAAAFIRST" />
+        <img src="data:image/png;base64,BBBBSECOND" />
+        <img src="data:image/png;base64,CCCC THIRD" />
+      </body>
+    </html>
+  </xsl:template>
+</xsl:stylesheet>`;
+      // Remove the SECOND image (index 1)
+      const result = removeElementFromXslt(xsltWithImages, 'img', {
+        targetTagName: 'img',
+        imageIndex: 1,
+      });
+      expect(result).toContain('AAAAFIRST');
+      expect(result).not.toContain('BBBBSECOND');
+      expect(result).toContain('CCCC THIRD');
+    });
+
+    it('should remove a whole table by tableXsltId when a cell is selected', () => {
+      const xsltWithTable = `<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <html>
+      <body>
+        <table class="keep">
+          <tr><td class="keep-cell">Keep</td></tr>
+        </table>
+        <table class="remove-me">
+          <tr><td class="remove-cell">Remove</td></tr>
+        </table>
+      </body>
+    </html>
+  </xsl:template>
+</xsl:stylesheet>`;
+      // Inject IDs deterministically to find table index, then remove by tableXsltId
+      // We compute the xsltId of the second table by counting non-xsl elements in document order.
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xsltWithTable, 'application/xml');
+      // Count elements (excluding xsl:* ) to find the 2nd table's id.
+      let counter = 1;
+      let secondTableId = '';
+      const walk = (node: Node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const el = node as Element;
+          if (el.namespaceURI !== 'http://www.w3.org/1999/XSL/Transform') {
+            if (el.tagName.toLowerCase() === 'table' && el.getAttribute('class') === 'remove-me') {
+              secondTableId = String(counter);
+            }
+            counter++;
+          }
+        }
+        for (let i = 0; i < node.childNodes.length; i++) walk(node.childNodes[i]);
+      };
+      walk(doc.documentElement);
+      const result = removeElementFromXslt(xsltWithTable, 'table', { tableXsltId: secondTableId });
+      expect(result).toContain('Keep');
+      expect(result).not.toContain('Remove');
+      expect(result).not.toContain('remove-me');
+    });
   });
 
   describe('updateXsltTagAtLine', () => {

@@ -84,6 +84,12 @@ export function StatusPanel() {
               {validationStatus.xsltError}
             </div>
           )}
+
+          {validationStatus.typeMismatchWarning && (
+            <div className="mt-2 p-2 bg-amber-950/30 border border-amber-900/40 rounded text-xs text-amber-300">
+              {validationStatus.typeMismatchWarning}
+            </div>
+          )}
         </section>
 
         {/* File Statistics */}

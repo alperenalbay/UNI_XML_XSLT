@@ -626,9 +626,9 @@ const WATERMARK_END_MARKER = '<!-- uni-watermark-end -->';
 function escapeForXmlAttribute(text: string): string {
   return text
     .replace(/&/g, '&')
-    .replace(/"/g, '"')
     .replace(/</g, '<')
-    .replace(/>/g, '>');
+    .replace(/>/g, '>')
+    .replace(/"/g, '"');
 }
 
 function buildWatermarkBlock(opts: WatermarkOptions): string {
@@ -636,17 +636,25 @@ function buildWatermarkBlock(opts: WatermarkOptions): string {
   const safeSize = Math.max(1, Math.min(100, Math.round(size)));
   const safeOpacity = Math.max(0, Math.min(100, Math.round(opacity)));
   const safeRotation = Math.round(rotation);
+  // Watermark rendered IN FRONT of content (high z-index) but with low opacity + pointer-events:none +
+  // mix-blend-mode:multiply. This is the standard e-invoice watermark technique: the watermark
+  // sits visually on top but is semi-transparent so the underlying invoice content remains readable.
+  // `mix-blend-mode:multiply` lets light backgrounds show through the watermark, giving the feel
+  // of a background watermark even though it's stacked on top. On print, multiply + transparent
+  // areas won't print as solid blocks.
   const overlayStyle = [
     'position:absolute',
     'top:0',
     'left:0',
-    'width:100%',
-    'height:100%',
+    'width:210mm',
+    'height:297mm',
     'display:flex',
     'align-items:center',
     'justify-content:center',
     'pointer-events:none',
     'z-index:9999',
+    'mix-blend-mode:multiply',
+    'overflow:hidden',
   ].join('; ');
   const imgStyle = [
     `width:${safeSize}%`,
@@ -876,43 +884,102 @@ export function removeElementFromXslt(xsltCode: string, selector: string, detail
 
     let el: Element | null = null;
 
-    // 1. Try to find by unique temporary XSLT ID if details is provided
-    if (details && details.xsltId) {
+    // 1. Try to find by tableXsltId (remove whole table) — table seçildiğinde tüm tabloyu sil
+    if (!el && details && details.tableXsltId) {
+      injectXsltIdsWithCounter(doc.documentElement, 1);
+      const tableEl = findElementByXsltId(doc.documentElement, String(details.tableXsltId));
+      if (tableEl && tableEl.tagName.toLowerCase() === 'table') {
+        el = tableEl;
+      }
+    }
+
+    // 2. Try to find by unique temporary XSLT ID if details is provided
+    if (!el && details && details.xsltId) {
       injectXsltIdsWithCounter(doc.documentElement, 1);
       el = findElementByXsltId(doc.documentElement, String(details.xsltId));
     }
 
-    // 2. If not found by XSLT ID, fallback to detailed base64 matching (for images)
+    // 3. If not found by XSLT ID, fallback to detailed image matching (by index first, then base64)
     if (!el && details && details.targetTagName) {
       const targetTag = details.targetTagName.toLowerCase();
       const targetSrc = details.targetSrc || '';
-      
-      const findExactElement = (root: Node): Element | null => {
-        if (root.nodeType === Node.ELEMENT_NODE) {
-          const element = root as Element;
-          if (element.tagName.toLowerCase() === targetTag) {
-            // If it's an image, match src (either exact, or if XSLT contains it as substring)
-            if (targetTag === 'img' && targetSrc) {
+
+      // 3a. If imageIndex is provided, find the n-th <img> element deterministically
+      if (targetTag === 'img' && details.imageIndex !== undefined && details.imageIndex !== null && details.imageIndex !== -1) {
+        const targetIdx = Number(details.imageIndex);
+        if (!Number.isNaN(targetIdx)) {
+          let imgCounter = 0;
+          const findNthImg = (root: Node): Element | null => {
+            if (root.nodeType === Node.ELEMENT_NODE) {
+              const element = root as Element;
+              if (element.tagName.toLowerCase() === 'img' && !element.closest('uni-watermark-overlay, .uni-watermark-overlay, .uni-watermark-preview-overlay')) {
+                if (imgCounter === targetIdx) return element;
+                imgCounter++;
+              }
+            }
+            for (let i = 0; i < root.childNodes.length; i++) {
+              const found = findNthImg(root.childNodes[i]);
+              if (found) return found;
+            }
+            return null;
+          };
+          el = findNthImg(doc.documentElement);
+        }
+      }
+
+      // 3b. Fallback to base64 substring matching (longer prefix for accuracy)
+      if (!el && targetTag === 'img' && targetSrc) {
+        const findExactElement = (root: Node): Element | null => {
+          if (root.nodeType === Node.ELEMENT_NODE) {
+            const element = root as Element;
+            if (element.tagName.toLowerCase() === targetTag) {
               const elementSrc = element.getAttribute('src') || '';
-              const cleanTargetSrc = targetSrc.replace(/^data:image\/[a-zA-Z]+;base64,/, '').replace(/\s/g, '').substring(0, 50);
-              const cleanElementSrc = elementSrc.replace(/^data:image\/[a-zA-Z]+;base64,/, '').replace(/\s/g, '').substring(0, 50);
+              // Use a longer prefix (256 chars) for reliable discrimination between similar images
+              const cleanTargetSrc = targetSrc.replace(/^data:image\/[a-zA-Z]+;base64,/, '').replace(/\s/g, '').substring(0, 256);
+              const cleanElementSrc = elementSrc.replace(/^data:image\/[a-zA-Z]+;base64,/, '').replace(/\s/g, '').substring(0, 256);
               if (cleanElementSrc && cleanTargetSrc && cleanElementSrc.includes(cleanTargetSrc)) {
                 return element;
               }
             }
           }
-        }
-        for (let i = 0; i < root.childNodes.length; i++) {
-          const found = findExactElement(root.childNodes[i]);
-          if (found) return found;
-        }
-        return null;
-      };
-      
-      el = findExactElement(doc.documentElement);
+          for (let i = 0; i < root.childNodes.length; i++) {
+            const found = findExactElement(root.childNodes[i]);
+            if (found) return found;
+          }
+          return null;
+        };
+
+        el = findExactElement(doc.documentElement);
+      }
+
+      // 3c. Non-image tags: match by tag name (and optional href for <a>)
+      if (!el && targetTag !== 'img') {
+        const findExactElement = (root: Node): Element | null => {
+          if (root.nodeType === Node.ELEMENT_NODE) {
+            const element = root as Element;
+            if (element.tagName.toLowerCase() === targetTag) {
+              if (targetTag === 'a' && details.targetHref) {
+                if (element.getAttribute('href') !== details.targetHref) {
+                  // Skip wrong <a>
+                } else {
+                  return element;
+                }
+              } else {
+                return element;
+              }
+            }
+          }
+          for (let i = 0; i < root.childNodes.length; i++) {
+            const found = findExactElement(root.childNodes[i]);
+            if (found) return found;
+          }
+          return null;
+        };
+        el = findExactElement(doc.documentElement);
+      }
     }
 
-    // 3. Fallback to selector matching if exact match not found AND no xsltId was provided
+    // 4. Fallback to selector matching if exact match not found AND no xsltId was provided
     if (!el && (!details || !details.xsltId)) {
       if (selector.startsWith('#')) {
         const idToFind = selector.substring(1);
@@ -1283,12 +1350,42 @@ function parseImgStyle(styleStr: string, property: string): string {
   return match ? match[1].trim() : '';
 }
 
+function findImgTagBySrc(xsltCode: string, imgSrc: string): string | null {
+  if (imgSrc.length < 200) {
+    const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const imgRegex = new RegExp(`<img\\b[^>]*src\\s*=\\s*["']${escapedSrc}["'][^>]*/?>`, 'i');
+    const match = xsltCode.match(imgRegex);
+    return match ? match[0] : null;
+  }
+  const srcIdx = xsltCode.indexOf(imgSrc);
+  if (srcIdx === -1) return null;
+  const before = xsltCode.lastIndexOf('<img', srcIdx);
+  if (before === -1) return null;
+  const after = xsltCode.indexOf('>', srcIdx);
+  if (after === -1) return null;
+  return xsltCode.substring(before, after + 1);
+}
+
 function parseWrapperStyle(xsltCode: string, imgSrc: string, property: string): string {
-  const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const wrapperMatch = xsltCode.match(new RegExp(`<div[^>]*>\\s*<img[^>]*src\\s*=\\s*["']${escapedSrc}["']`, 'i'));
-  if (!wrapperMatch) return '';
-  const wrapperStart = wrapperMatch[0];
-  const styleMatch = wrapperStart.match(/style\s*=\s*["']([^"']*)["']/i);
+  if (imgSrc.length < 200) {
+    const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wrapperMatch = xsltCode.match(new RegExp(`<div[^>]*>\\s*<img[^>]*src\\s*=\\s*["']${escapedSrc}["']`, 'i'));
+    if (!wrapperMatch) return '';
+    const wrapperStart = wrapperMatch[0];
+    const styleMatch = wrapperStart.match(/style\s*=\s*["']([^"']*)["']/i);
+    if (styleMatch) {
+      return parseImgStyle(styleMatch[1], property);
+    }
+    return '';
+  }
+  const srcIdx = xsltCode.indexOf(imgSrc);
+  if (srcIdx === -1) return '';
+  const beforeDiv = xsltCode.lastIndexOf('<div', srcIdx);
+  if (beforeDiv === -1) return '';
+  const divEnd = xsltCode.indexOf('>', beforeDiv);
+  if (divEnd === -1 || divEnd < srcIdx) return '';
+  const divOpenTag = xsltCode.substring(beforeDiv, divEnd + 1);
+  const styleMatch = divOpenTag.match(/style\s*=\s*["']([^"']*)["']/i);
   if (styleMatch) {
     return parseImgStyle(styleMatch[1], property);
   }
@@ -1330,21 +1427,48 @@ function updateImgStyleInTag(tagContent: string, property: string, value: string
 }
 
 function updateImgTagBySrc(xsltCode: string, imgSrc: string, property: string, value: string): string {
-  const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const imgRegex = new RegExp(`(<img\\b[^>]*src\\s*=\\s*["']${escapedSrc}["'][^>]*)(/?>)`, 'i');
-  return xsltCode.replace(imgRegex, (_match, before, closing) => {
-    const updatedBefore = updateImgStyleInTag(before, property, value);
-    return updatedBefore + closing;
-  });
+  if (imgSrc.length < 200) {
+    const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const imgRegex = new RegExp(`(<img\\b[^>]*src\\s*=\\s*["']${escapedSrc}["'][^>]*)(/?>)`, 'i');
+    return xsltCode.replace(imgRegex, (_match, before, closing) => {
+      const updatedBefore = updateImgStyleInTag(before, property, value);
+      return updatedBefore + closing;
+    });
+  }
+  const tagContent = findImgTagBySrc(xsltCode, imgSrc);
+  if (!tagContent) return xsltCode;
+  const closingMatch = tagContent.match(/(\/?>)$/);
+  if (!closingMatch) return xsltCode;
+  const closing = closingMatch[1];
+  const before = tagContent.slice(0, -closing.length).trimEnd();
+  const updatedBefore = updateImgStyleInTag(before, property, value);
+  return xsltCode.replace(tagContent, updatedBefore + closing);
 }
 
 function updateWrapperDivByImgSrc(xsltCode: string, imgSrc: string, property: string, value: string): string {
-  const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const wrapperRegex = new RegExp(`(<div\\b[^>]*>)\\s*\\n?\\s*(<img\\b[^>]*src\\s*=\\s*["']${escapedSrc}["'][^>]*/?>)`, 'i');
-  return xsltCode.replace(wrapperRegex, (_match, divOpen, imgTag) => {
-    const updatedDiv = updateImgStyleInTag(divOpen, property, value);
-    return updatedDiv + '\n' + imgTag;
-  });
+  if (imgSrc.length < 200) {
+    const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wrapperRegex = new RegExp(`(<div\\b[^>]*>)\\s*\\n?\\s*(<img\\b[^>]*src\\s*=\\s*["']${escapedSrc}["'][^>]*/?>)`, 'i');
+    return xsltCode.replace(wrapperRegex, (_match, divOpen, imgTag) => {
+      const updatedDiv = updateImgStyleInTag(divOpen, property, value);
+      return updatedDiv + '\n' + imgTag;
+    });
+  }
+  const srcIdx = xsltCode.indexOf(imgSrc);
+  if (srcIdx === -1) return xsltCode;
+  const beforeDiv = xsltCode.lastIndexOf('<div', srcIdx);
+  if (beforeDiv === -1) return xsltCode;
+  const divClose = xsltCode.indexOf('>', beforeDiv);
+  if (divClose === -1 || divClose >= srcIdx) return xsltCode;
+  const divOpen = xsltCode.substring(beforeDiv, divClose + 1);
+  const afterDiv = xsltCode.indexOf('<img', divClose);
+  if (afterDiv === -1) return xsltCode;
+  const imgClose = xsltCode.indexOf('>', afterDiv);
+  if (imgClose === -1) return xsltCode;
+  const imgTag = xsltCode.substring(afterDiv, imgClose + 1);
+  const updatedDiv = updateImgStyleInTag(divOpen, property, value);
+  const oldFragment = xsltCode.substring(beforeDiv, imgClose + 1);
+  return xsltCode.replace(oldFragment, updatedDiv + '\n' + imgTag);
 }
 
 export function extractAllImagesFromXslt(xsltCode: string): ImageInfo[] {
@@ -1382,8 +1506,24 @@ export function extractAllImagesFromXslt(xsltCode: string): ImageInfo[] {
     const wrapperMargin = parseWrapperStyle(xsltCode, src, 'margin');
     const wrapperFloat = parseWrapperStyle(xsltCode, src, 'float');
 
-    const wrapperClassMatch = xsltCode.match(new RegExp(`<div\\b([^>]*)>\\s*<img[^>]*src\\s*=\\s*["']${src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`, 'i'));
-    const wrapperClass = wrapperClassMatch?.[1]?.match(/class\s*=\s*["']([^"']*)["']/i)?.[1] || '';
+    let wrapperClass = '';
+    if (src.length < 200) {
+      const wrapperClassMatch = xsltCode.match(new RegExp(`<div\\b([^>]*)>\\s*<img[^>]*src\\s*=\\s*["']${src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`, 'i'));
+      wrapperClass = wrapperClassMatch?.[1]?.match(/class\s*=\s*["']([^"']*)["']/i)?.[1] || '';
+    } else {
+      const srcIdx = xsltCode.indexOf(src);
+      if (srcIdx !== -1) {
+        const beforeDiv = xsltCode.lastIndexOf('<div', srcIdx);
+        if (beforeDiv !== -1) {
+          const divEnd = xsltCode.indexOf('>', beforeDiv);
+          if (divEnd !== -1 && divEnd < srcIdx) {
+            const divAttrs = xsltCode.substring(beforeDiv + 4, divEnd);
+            const clsMatch = divAttrs.match(/class\s*=\s*["']([^"']*)["']/i);
+            wrapperClass = clsMatch ? clsMatch[1] : '';
+          }
+        }
+      }
+    }
 
     results.push({
       src, alt, className, xsltId, index, isBase64, previewSrc,
@@ -1402,9 +1542,7 @@ export function extractAllImagesFromXslt(xsltCode: string): ImageInfo[] {
 export function replaceImageInXslt(xsltCode: string, oldSrc: string, newSrc: string): string {
   if (!xsltCode.trim() || !oldSrc || !newSrc) return xsltCode;
   try {
-    const escapedOld = oldSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(escapedOld, 'g');
-    return xsltCode.replace(regex, newSrc);
+    return xsltCode.split(oldSrc).join(newSrc);
   } catch (err) {
     console.error('Failed to replace image in XSLT', err);
     return xsltCode;
@@ -1414,7 +1552,6 @@ export function replaceImageInXslt(xsltCode: string, oldSrc: string, newSrc: str
 export function addImageToXslt(xsltCode: string, src: string, alt: string): string {
   if (!xsltCode.trim() || !src) return xsltCode;
   try {
-    const uniqueId = Date.now();
     const imgTag = `<div style="text-align: center; margin: 10px 0px; padding: 0px;">
   <img src="${escapeForXmlAttribute(src)}" alt="${escapeForXmlAttribute(alt || '')}" style="max-width: 100%; width: 300px; height: auto; display: inline-block;" />
 </div>`;
@@ -1466,18 +1603,15 @@ export function updateImageStyleInXslt(xsltCode: string, imgSrc: string, propert
 export function getImageStyleFromXslt(xsltCode: string, imgSrc: string, property: string): string {
   if (!xsltCode.trim() || !imgSrc || !property) return '';
   try {
-    const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const imgMatch = xsltCode.match(new RegExp(`<img\\b[^>]*src\\s*=\\s*["']${escapedSrc}["'][^>]*>`, 'i'));
-    if (!imgMatch) return '';
+    const tagContent = findImgTagBySrc(xsltCode, imgSrc);
+    if (!tagContent) return '';
 
-    const tagContent = imgMatch[0];
     const styleMatch = tagContent.match(/style\s*=\s*["']([^"']*)["']/i);
     if (styleMatch) {
       const val = parseImgStyle(styleMatch[1], property);
       if (val) return val;
     }
 
-    const imgProps = ['width', 'max-width', 'height', 'display', 'float'];
     const wrapperProps = ['text-align', 'margin', 'padding'];
 
     if (wrapperProps.includes(property)) {
@@ -1569,6 +1703,7 @@ export function findLineByXsltId(xsltCode: string, targetId: string): number {
     let line = 1;
     let xsltIdCounter = 1;
     const target = Number(targetId);
+    const counterToLine: Record<number, number> = {};
     
     // Find XSLT prefix from the stylesheet element, e.g. <xsl:stylesheet -> xsl
     let xslPrefix = 'xsl';
@@ -1626,9 +1761,7 @@ export function findLineByXsltId(xsltCode: string, targetId: string): number {
             if (tagNameMatch) {
               const name = tagNameMatch[1];
               if (!name.startsWith(xslPrefixColon)) {
-                if (xsltIdCounter === target) {
-                  return currentTagStartLine;
-                }
+                counterToLine[xsltIdCounter] = currentTagStartLine;
                 xsltIdCounter++;
               }
             }
@@ -1640,6 +1773,18 @@ export function findLineByXsltId(xsltCode: string, targetId: string): number {
       if (inTag) {
         tagContent += char;
       }
+    }
+    
+    // Direct match
+    if (counterToLine[target]) return counterToLine[target];
+    
+    // Elements inside XSLT loops (for-each, apply-templates etc.)
+    // produce multiple DOM copies but share the same template tag.
+    // Use modulo to wrap around to the correct template position.
+    const maxCounter = xsltIdCounter - 1;
+    if (maxCounter > 0 && target > maxCounter) {
+      const adjusted = ((target - 1) % maxCounter) + 1;
+      return counterToLine[adjusted] || 0;
     }
   } catch (e) {
     console.error('Failed to find line by XSLT ID scanner', e);

@@ -4686,3 +4686,206 @@ export const EMPTY_XSLT = `<?xml version="1.0" encoding="UTF-8"?>
     </xsl:template>
 </xsl:stylesheet>`;
 
+export const DEFAULT_DESPATCH_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<!-- ÖRNEK İRSALİYE VERİSİ (KVKK UYUMLU - TAMAMIYLA HAYALİ VERİLERDİR, GERÇEK KİŞİ/KURUM BİLGİSİ İÇERMEZ) -->
+<DespatchAdvice xmlns="urn:oasis:names:specification:ubl:schema:xsd:DespatchAdvice-2"
+                xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+                xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
+                xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2">
+    <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+    <cbc:CustomizationID>TR1.2</cbc:CustomizationID>
+    <cbc:ProfileID>TEMELIRSALIYE</cbc:ProfileID>
+    <cbc:ID>IR2026000000001</cbc:ID>
+    <cbc:CopyIndicator>false</cbc:CopyIndicator>
+    <cbc:UUID>f2a1c3d4-5b6e-4c7f-9a8b-1234abc5678d</cbc:UUID>
+    <cbc:IssueDate>2026-07-31</cbc:IssueDate>
+    <cbc:IssueTime>10:15:00</cbc:IssueTime>
+    <cbc:DespatchAdviceTypeCode>SEVK</cbc:DespatchAdviceTypeCode>
+    <cbc:Note>ÖRNEK VERİ AMAÇLI DÜZENLENMİŞTİR.</cbc:Note>
+    <cbc:Note>Düzenleyen : ÖRNEK ŞİRKET</cbc:Note>
+    <cbc:Note>Onaylayan : ÖRNEK ŞİRKET</cbc:Note>
+    <cbc:LineCountNumeric>2</cbc:LineCountNumeric>
+
+    <cac:DespatchSupplierParty>
+        <cac:Party>
+            <cac:PartyIdentification>
+                <cbc:ID schemeID="TCKN">10000000001</cbc:ID>
+            </cac:PartyIdentification>
+            <cac:PartyIdentification>
+                <cbc:ID schemeID="TICARETSICILNO">123456</cbc:ID>
+            </cac:PartyIdentification>
+            <cac:PartyName>
+                <cbc:Name>ÖRNEK TEKNOLOJİ SAN. VE TİC. LTD. ŞTİ.</cbc:Name>
+            </cac:PartyName>
+            <cac:PostalAddress>
+                <cbc:Room>2</cbc:Room>
+                <cbc:StreetName>DEMO CADDESİ</cbc:StreetName>
+                <cbc:BuildingNumber>42</cbc:BuildingNumber>
+                <cbc:CitySubdivisionName>ÇANKAYA</cbc:CitySubdivisionName>
+                <cbc:CityName>ANKARA</cbc:CityName>
+                <cbc:District>KIZILAY MAHALLESİ</cbc:District>
+                <cac:Country>
+                    <cbc:Name>TÜRKİYE</cbc:Name>
+                </cac:Country>
+            </cac:PostalAddress>
+            <cac:PartyTaxScheme>
+                <cac:TaxScheme>
+                    <cbc:Name>Çankaya Vergi Dairesi</cbc:Name>
+                </cac:TaxScheme>
+            </cac:PartyTaxScheme>
+            <cac:Contact>
+                <cbc:Telephone>+903120000000</cbc:Telephone>
+                <cbc:ElectronicMail>ornekfirma@example.com</cbc:ElectronicMail>
+            </cac:Contact>
+            <cac:Person>
+                <cbc:FirstName>ALİ</cbc:FirstName>
+                <cbc:FamilyName>DEMİR</cbc:FamilyName>
+            </cac:Person>
+        </cac:Party>
+        <cac:DespatchContact>
+            <cbc:Name>ALİ DEMİR</cbc:Name>
+        </cac:DespatchContact>
+    </cac:DespatchSupplierParty>
+
+    <cac:DeliveryCustomerParty>
+        <cac:Party>
+            <cac:PartyIdentification>
+                <cbc:ID schemeID="VKN">9999999999</cbc:ID>
+            </cac:PartyIdentification>
+            <cac:PartyName>
+                <cbc:Name>ÖRNEK PAZARLAMA VE DAĞITIM A.Ş.</cbc:Name>
+            </cac:PartyName>
+            <cac:PostalAddress>
+                <cbc:StreetName>MODEL BULVARI</cbc:StreetName>
+                <cbc:CitySubdivisionName>NİLÜFER</cbc:CitySubdivisionName>
+                <cbc:CityName>BURSA</cbc:CityName>
+                <cbc:District>DEMOKRASİ MAH.</cbc:District>
+                <cac:Country>
+                    <cbc:Name>TÜRKİYE</cbc:Name>
+                </cac:Country>
+            </cac:PostalAddress>
+            <cac:Contact>
+                <cbc:ElectronicMail>musteri@example.com</cbc:ElectronicMail>
+            </cac:Contact>
+        </cac:Party>
+    </cac:DeliveryCustomerParty>
+
+    <cac:BuyerCustomerParty>
+        <cac:Party>
+            <cac:PartyIdentification>
+                <cbc:ID schemeID="VKN">9999999999</cbc:ID>
+            </cac:PartyIdentification>
+            <cac:PartyName>
+                <cbc:Name>ÖRNEK PAZARLAMA VE DAĞITIM A.Ş.</cbc:Name>
+            </cac:PartyName>
+            <cac:PostalAddress>
+                <cbc:StreetName>MODEL BULVARI</cbc:StreetName>
+                <cbc:CitySubdivisionName>NİLÜFER</cbc:CitySubdivisionName>
+                <cbc:CityName>BURSA</cbc:CityName>
+                <cbc:District>DEMOKRASİ MAH.</cbc:District>
+                <cac:Country>
+                    <cbc:Name>TÜRKİYE</cbc:Name>
+                </cac:Country>
+            </cac:PostalAddress>
+            <cac:PartyTaxScheme>
+                <cac:TaxScheme>
+                    <cbc:Name>Nilüfer Vergi Dairesi</cbc:Name>
+                </cac:TaxScheme>
+            </cac:PartyTaxScheme>
+            <cac:Contact>
+                <cbc:ElectronicMail>musteri@example.com</cbc:ElectronicMail>
+            </cac:Contact>
+        </cac:Party>
+    </cac:BuyerCustomerParty>
+
+    <cac:SellerSupplierParty>
+        <cac:Party>
+            <cac:PartyIdentification>
+                <cbc:ID schemeID="TCKN">10000000001</cbc:ID>
+            </cac:PartyIdentification>
+            <cac:PartyName>
+                <cbc:Name>ÖRNEK TEKNOLOJİ SAN. VE TİC. LTD. ŞTİ.</cbc:Name>
+            </cac:PartyName>
+            <cac:PostalAddress>
+                <cbc:CitySubdivisionName>ÇANKAYA</cbc:CitySubdivisionName>
+                <cbc:CityName>ANKARA</cbc:CityName>
+                <cac:Country>
+                    <cbc:Name>TÜRKİYE</cbc:Name>
+                </cac:Country>
+            </cac:PostalAddress>
+            <cac:Person>
+                <cbc:FirstName>ALİ</cbc:FirstName>
+                <cbc:FamilyName>DEMİR</cbc:FamilyName>
+            </cac:Person>
+        </cac:Party>
+    </cac:SellerSupplierParty>
+
+    <cac:Shipment>
+        <cbc:ID>IR2026000000001</cbc:ID>
+        <cbc:GrossWeightMeasure unitCode="KGM">150.50</cbc:GrossWeightMeasure>
+        <cbc:NetWeightMeasure unitCode="KGM">140.00</cbc:NetWeightMeasure>
+        <cac:ShipmentStage>
+            <cbc:TransportModeCode>3</cbc:TransportModeCode>
+            <cac:DriverPerson>
+                <cbc:FirstName>MEHMET</cbc:FirstName>
+                <cbc:FamilyName>KAYA</cbc:FamilyName>
+                <cbc:NationalityID>10000000002</cbc:NationalityID>
+            </cac:DriverPerson>
+        </cac:ShipmentStage>
+        <cac:Delivery>
+            <cac:DeliveryAddress>
+                <cbc:StreetName>MODEL BULVARI</cbc:StreetName>
+                <cbc:CitySubdivisionName>NİLÜFER</cbc:CitySubdivisionName>
+                <cbc:CityName>BURSA</cbc:CityName>
+                <cbc:PostalZone>16140</cbc:PostalZone>
+                <cbc:District>DEMOKRASİ MAH.</cbc:District>
+                <cac:Country>
+                    <cbc:Name>TÜRKİYE</cbc:Name>
+                </cac:Country>
+            </cac:DeliveryAddress>
+            <cac:CarrierParty>
+                <cac:PartyIdentification>
+                    <cbc:ID schemeID="TCKN">10000000002</cbc:ID>
+                </cac:PartyIdentification>
+                <cac:PartyName>
+                    <cbc:Name>ÖRNEK KARGO TAŞIMACILIK</cbc:Name>
+                </cac:PartyName>
+            </cac:CarrierParty>
+            <cac:Despatch>
+                <cbc:ActualDespatchDate>2026-07-31</cbc:ActualDespatchDate>
+                <cbc:ActualDespatchTime>10:15:00</cbc:ActualDespatchTime>
+            </cac:Despatch>
+        </cac:Delivery>
+    </cac:Shipment>
+
+    <cac:DespatchLine>
+        <cbc:ID>1</cbc:ID>
+        <cbc:DeliveredQuantity unitCode="C62">10.000000</cbc:DeliveredQuantity>
+        <cbc:OutstandingQuantity unitCode="C62">0.000000</cbc:OutstandingQuantity>
+        <cbc:OversupplyQuantity unitCode="C62">0.000000</cbc:OversupplyQuantity>
+        <cac:OrderLineReference>
+            <cbc:LineID>1</cbc:LineID>
+        </cac:OrderLineReference>
+        <cac:Item>
+            <cbc:Description>15.6 INÇ DİZÜSTÜ BİLGİSAYAR</cbc:Description>
+            <cbc:Name>ÖRNEK MARKA DİZÜSTÜ BİLGİSAYAR</cbc:Name>
+            <cac:SellersItemIdentification>
+                <cbc:ID>PRD-1001</cbc:ID>
+            </cac:SellersItemIdentification>
+        </cac:Item>
+    </cac:DespatchLine>
+
+    <cac:DespatchLine>
+        <cbc:ID>2</cbc:ID>
+        <cbc:DeliveredQuantity unitCode="C62">20.000000</cbc:DeliveredQuantity>
+        <cbc:OutstandingQuantity unitCode="C62">0.000000</cbc:OutstandingQuantity>
+        <cbc:OversupplyQuantity unitCode="C62">0.000000</cbc:OversupplyQuantity>
+        <cac:Item>
+            <cbc:Name>ÖRNEK MARKA WİRELESS MOUSE</cbc:Name>
+            <cac:SellersItemIdentification>
+                <cbc:ID>PRD-1002</cbc:ID>
+            </cac:SellersItemIdentification>
+        </cac:Item>
+    </cac:DespatchLine>
+</DespatchAdvice>`;
+

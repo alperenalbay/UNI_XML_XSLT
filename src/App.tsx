@@ -51,7 +51,7 @@ import {
   getImageTransformFromXslt,
   setImageTransformInXslt
 } from './utils/xsltTransformer'
-import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
+import { DEFAULT_XML, DEFAULT_DESPATCH_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 import { ToastContainer, useToast } from './components'
 import { WatermarkPanel } from './components/WatermarkPanel'
 import { useEditorStore } from './store/editorStore'
@@ -507,17 +507,41 @@ function App() {
       xsltValid = true
     }
 
-    setValidationStatus({ xmlValid, xsltValid, xmlError, xsltError })
+    // Detect template/data type mismatch (e.g. irsaliye template with invoice XML)
+    let typeMismatchWarning: string | undefined = undefined
+    if (xmlValid && xsltValid && xmlContent.trim() && xsltContent.trim()) {
+      const xmlDoc = parser.parseFromString(xmlContent, 'application/xml')
+      const xsltDoc = parser.parseFromString(xsltContent, 'application/xml')
+      const xmlHasDespatch = !!xmlDoc.querySelector(
+        'DespatchAdvice, DespatchLine, DespatchSupplierParty, ActualDespatchDate'
+      )
+      const xsltHasDespatch =
+        /DespatchAdvice|DespatchLine|DespatchSupplierParty|ActualDespatchDate/i.test(xsltContent) ||
+        !!xsltDoc.querySelector(
+          'DespatchAdvice, DespatchLine, DespatchSupplierParty, ActualDespatchDate'
+        )
+      if (xsltHasDespatch && !xmlHasDespatch) {
+        typeMismatchWarning =
+          'İrsaliye (DespatchAdvice) şablonu yüklü ancak XML verisi fatura/arşiv formatında. Görsel çıktı boş kalabilir.'
+      } else if (!xsltHasDespatch && xmlHasDespatch) {
+        typeMismatchWarning =
+          'İrsaliye (DespatchAdvice) XML verisi yüklü ancak şablon fatura/arşiv formatında. Görsel çıktı boş kalabilir.'
+      }
+    }
+
+    setValidationStatus({ xmlValid, xsltValid, xmlError, xsltError, typeMismatchWarning })
   }, [xmlContent, xsltContent])
 
   // Perform Transform
   const runTransformation = () => {
-    if (!xmlContent.trim() || !xsltContent.trim()) {
+    const currentXml = xmlContent || useEditorStore.getState().xmlContent
+    const currentXslt = xsltContent || useEditorStore.getState().xsltContent
+    if (!currentXml.trim() || !currentXslt.trim()) {
       setHtmlOutput('')
       setErrorMsg(undefined)
       return
     }
-    const result = transformXmlWithXslt(xmlContent, xsltContent)
+    const result = transformXmlWithXslt(currentXml, currentXslt)
     if (result.error) {
       setErrorMsg(result.error)
       addToast({
@@ -573,7 +597,24 @@ function App() {
     }
 
     let rawHtml = htmlOutput;
+    // If the preview is empty but a watermark image is loaded, give the watermark a minimal
+    // HTML frame so the user can still see it before any XSLT transformation has produced output.
+    if (!rawHtml && watermarkVisible && watermarkImage) {
+      rawHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Filigran Önizleme</title></head><body></body></html>`;
+    }
     if (rawHtml) {
+      // Debug: log watermark state in preview composition
+      // eslint-disable-next-line no-console
+      console.log('[uni-watermark-debug]', {
+        hasHtmlOutput: !!htmlOutput,
+        watermarkVisible,
+        hasWatermarkImage: !!watermarkImage,
+        watermarkImagePrefix: watermarkImage ? watermarkImage.substring(0, 40) + '...' : '(empty)',
+        watermarkSize,
+        watermarkOpacity,
+        editorActiveTab,
+        designerActive,
+      });
       const printStyles = `
         @media print {
           html, body {
@@ -857,10 +898,17 @@ function App() {
       });
     }
 
-    // Add data-image-index to all img tags for robust drag tracking
-    if (editorActiveTab === 'imag-editor' && rawHtml) {
+    // Add data-image-index to all img tags for robust drag tracking & removal
+    if ((editorActiveTab === 'imag-editor' || designerActive) && rawHtml) {
       let imgCounter = 0;
       rawHtml = rawHtml.replace(/<img\b/gi, () => `<img data-image-index="${imgCounter++}"`);
+      // Also tag <div id="qrcode"> and similar QR containers so they can be selected/removed.
+      // QR codes rendered via JS into a div; marking the container lets the designer target it.
+      let qrCounter = 0;
+      rawHtml = rawHtml.replace(/<div\b[^>]*\bid=["']?qrcode["']?[^>]*>/gi, (m) => `${m.replace(/>$/, ' data-qr-index="' + (qrCounter++) + '">')}`);
+      // Some samples render QR into <canvas>; tag those too.
+      let canvasCounter = 0;
+      rawHtml = rawHtml.replace(/<canvas\b/gi, () => `<canvas data-canvas-index="${canvasCounter++}"`);
     }
 
     // Image drag script for visual editor mode
@@ -948,17 +996,31 @@ function App() {
       const safeSize = Math.max(1, Math.min(100, Math.round(watermarkSize)));
       const safeOpacity = Math.max(0, Math.min(100, Math.round(watermarkOpacity)));
       const safeRotation = Math.round(watermarkRotation);
+      // Single absolute overlay positioned over the body (which is `position:relative` + `transform:scale`
+      // in handleIframeLoad, making it the containing block). Concrete 210mm×297mm dimensions ensure
+      // the overlay covers the whole A4 page. `z-index:0` keeps it BEHIND the invoice content
+      // (which is rendered with the default stacking context above z-index:0 overlay when positioned),
+      // so the watermark acts as a background watermark rather than covering/overlaying the content.
+      // Watermark rendered IN FRONT of content (high z-index) but with low opacity + pointer-events:none +
+      // mix-blend-mode:multiply. This is the standard e-invoice watermark technique: the watermark
+      // sits visually on top but is semi-transparent so the underlying invoice content remains
+      // readable. `mix-blend-mode:multiply` makes white/light backgrounds effectively "show through"
+      // the watermark, giving the feel of a background watermark even though it's stacked on top.
+      // On print, multiply + transparent areas won't print as solid blocks (and the print stylesheet
+      // removes the scale transform), so the watermark stays subtle on physical output too.
       const overlayStyle = [
         'position:absolute',
         'top:0',
         'left:0',
-        'width:100%',
-        'height:100%',
+        'width:210mm',
+        'height:297mm',
         'display:flex',
         'align-items:center',
         'justify-content:center',
         'pointer-events:none',
         'z-index:9999',
+        'mix-blend-mode:multiply',
+        'overflow:hidden',
       ].join('; ');
       const imgStyle = [
         `width:${safeSize}%`,
@@ -976,6 +1038,13 @@ function App() {
       } else {
         rawHtml = previewWatermarkBlock + rawHtml;
       }
+      // eslint-disable-next-line no-console
+      console.log('[uni-watermark-debug] watermark block injected', {
+        blockLength: previewWatermarkBlock.length,
+        hasBody: rawHtml.includes('<body'),
+        rawHtmlIncludesWatermark: rawHtml.includes('uni-watermark-preview-overlay'),
+        rawHtmlLength: rawHtml.length,
+      });
     }
 
     return rawHtml || '<p style="padding: 20px; color: #64748b; font-family: sans-serif; text-align: center;">Dönüştürülmüş fatura görüntüsü burada görüntülenecektir.</p>';
@@ -1038,7 +1107,7 @@ function App() {
       innerDoc.body.style.backgroundColor = '#ffffff'
       innerDoc.body.style.transition = 'transform 0.15s ease-out'
 
-      if (editorActiveTab === 'imag-editor') {
+      if (designerActive) {
         innerDoc.body.style.position = 'relative';
       }
     }
@@ -1145,16 +1214,44 @@ function App() {
         const parentTable = cell ? cell.closest('table') : target.closest('table');
         const tableXsltId = parentTable ? parentTable.getAttribute('data-xslt-id') || '' : '';
 
+        // For images, send imageIndex (data-image-index) for reliable removal.
+        // Also treat QR code container (<div id="qrcode">) and its inner <img>/<canvas> as image-like elements.
+        let imageIndex: number | null = null;
+        let isQrCode = false;
+        if (foundTagName === 'img') {
+          const rawIdx = target.getAttribute('data-image-index');
+          if (rawIdx !== null) imageIndex = parseInt(rawIdx, 10);
+        }
+        // QR code detection: element itself is the #qrcode container OR it's a child of #qrcode
+        const qrContainer = target.id === 'qrcode' ? target : (target.closest('#qrcode') as HTMLElement | null);
+        if (qrContainer) {
+          isQrCode = true;
+          // Use the qrcode container as the actual target for selection / removal
+          if (target !== qrContainer) {
+            // clicked inside QR — promote to container
+            // (we still report targetTagName as 'img'/'canvas' for descendant, but we send
+            //  tableXsltId-style fallback by including qrIndex so removeElementFromXslt can find the container)
+          }
+          const qrIdx = qrContainer.getAttribute('data-qr-index');
+          if (qrIdx !== null) {
+            imageIndex = parseInt(qrIdx, 10);
+          }
+          // Override targetTagName so removeElementFromXslt treats it like a removable asset block
+          foundTagName = 'div';
+        }
+
         window.parent.postMessage({
           source: designerActive ? 'xslt-designer-click' : 'xslt-preview-inspector',
           text,
-          className: foundClass || target.className || '',
+          className: foundClass || (isQrCode ? 'uni-qr-code' : target.className) || '',
           tagName: foundTagName,
-          id: foundId || target.id || '',
-          targetTagName: target.tagName.toLowerCase(),
+          id: foundId || (isQrCode ? 'qrcode' : target.id) || '',
+          targetTagName: isQrCode ? 'div' : target.tagName.toLowerCase(),
           targetSrc: target.getAttribute('src') || '',
           targetHref: target.getAttribute('href') || '',
-          xsltId: target.getAttribute('data-xslt-id') || '',
+          xsltId: (isQrCode && qrContainer ? qrContainer : target).getAttribute('data-xslt-id') || '',
+          imageIndex,
+          isQrCode,
           colXsltId,
           colWidth,
           cellXsltId,
@@ -1167,24 +1264,20 @@ function App() {
       innerDoc.addEventListener('dblclick', (e) => {
         const target = e.target as HTMLElement
         if (target && target.nodeType === Node.ELEMENT_NODE) {
+          if (target.tagName === 'BODY' || target.tagName === 'HTML') return
           const textVal = (target.innerText || '').trim()
           if (!textVal) return
-
-          if (target.children.length === 0 || xsltContent.includes(textVal)) {
-            target.contentEditable = "true"
-            target.focus()
-            target.setAttribute('data-original-text', target.innerText || '')
-            target.setAttribute('data-xslt-id-editable', target.getAttribute('data-xslt-id') || '')
-
-            // Pressing Enter will blur (which triggers focusout to save)
-            const handleEnter = (ev: KeyboardEvent) => {
-              if (ev.key === 'Enter' && !ev.shiftKey) {
-                ev.preventDefault()
-                target.blur()
-              }
+          target.contentEditable = "true"
+          target.focus()
+          target.setAttribute('data-original-text', target.innerText || '')
+          target.setAttribute('data-xslt-id-editable', target.getAttribute('data-xslt-id') || '')
+          const handleEnter = (ev: KeyboardEvent) => {
+            if (ev.key === 'Enter' && !ev.shiftKey) {
+              ev.preventDefault()
+              target.blur()
             }
-            target.addEventListener('keydown', handleEnter, { once: true })
           }
+          target.addEventListener('keydown', handleEnter, { once: true })
         }
       })
 
@@ -1297,11 +1390,13 @@ function App() {
 
   const jumpToXsltLine = (line: number) => {
     setEditorActiveTab('xslt')
-    if (xsltEditorRef.current) {
-      xsltEditorRef.current.revealLineInCenter(line)
-      xsltEditorRef.current.setPosition({ lineNumber: line, column: 1 })
-      xsltEditorRef.current.focus()
-    }
+    setTimeout(() => {
+      if (xsltEditorRef.current) {
+        xsltEditorRef.current.revealLineInCenter(line)
+        xsltEditorRef.current.setPosition({ lineNumber: line, column: 1 })
+        xsltEditorRef.current.focus()
+      }
+    }, 50)
   }
 
   // Handle messages from the iframe (Text edits and selector clicks)
@@ -1309,7 +1404,7 @@ function App() {
     const handleInspectorMessage = (event: MessageEvent) => {
       if (!event.data) return
 
-      const { source, text, className, tagName, id, original, current, targetTagName, targetSrc, targetHref, xsltId, colXsltId, colWidth, cellXsltId, tableXsltId, styles, message, lineno, colno, args } = event.data
+      const { source, text, className, tagName, id, original, current, targetTagName, targetSrc, targetHref, xsltId, imageIndex, isQrCode, colXsltId, colWidth, cellXsltId, tableXsltId, styles, message, lineno, colno, args } = event.data
 
       if (source === 'iframe-error') {
         const errStr = `[Hata] ${message} (${lineno}:${colno})`;
@@ -1392,11 +1487,13 @@ function App() {
             line = findLineInCode(xsltContent, searchTerms)
           }
         }
-        if (line > 1) {
+        if (line >= 1) {
           jumpToXsltLine(line)
           setInspectorStatus(`Satır ${line} konumuna odaklanıldı (${text ? `"${text.substring(0, 12)}..."` : className || tagName})`)
           setTimeout(() => setInspectorStatus(null), 3000)
         }
+        // Also track selected element for contextual toolbar
+        setSelectedElementDetails({ targetTagName, targetSrc, targetHref, xsltId, imageIndex, isQrCode, colXsltId, cellXsltId: cellXsltId || '', tableXsltId: tableXsltId || '' })
       } 
       
       // Case 3: Click in Designer mode (focuses selector & loads style panel - stays in designer tab!)
@@ -1422,7 +1519,7 @@ function App() {
 
         setSelectedSelector(sel)
         setSelectedElementName(elementName)
-        setSelectedElementDetails({ targetTagName, targetSrc, targetHref, xsltId, colXsltId, cellXsltId: cellXsltId || '', tableXsltId: tableXsltId || '' })
+        setSelectedElementDetails({ targetTagName, targetSrc, targetHref, xsltId, imageIndex, isQrCode, colXsltId, cellXsltId: cellXsltId || '', tableXsltId: tableXsltId || '' })
         
         // Extract current CSS property values from XSLT code (Prefer computed styles, fallback to XSLT style block)
         if (styles) {
@@ -1526,6 +1623,17 @@ function App() {
     return () => window.removeEventListener('message', handleInspectorMessage)
   }, [xsltContent, designerActive, inspectorActive])
 
+  // Show toast when HTML is copied
+  useEffect(() => {
+    if (isCopied) {
+      addToast({
+        type: 'success',
+        message: 'HTML Kopyalandı',
+        description: 'Dönüştürülen HTML çıktısı panoya kopyalandı.'
+      })
+    }
+  }, [isCopied])
+
   // Helper to extract a clean hex color from style values (removing !important etc.)
   const cleanHexColor = (colorString: string): string => {
     if (!colorString) return '#333333'
@@ -1613,7 +1721,7 @@ function App() {
   }
 
   const handleRemoveElement = (selector: string, details?: any) => {
-    if (!selector) return
+    if (!selector && !details?.xsltId && !details?.tableXsltId) return
     const updated = removeElementFromXslt(xsltContent, selector, details)
     if (updated !== xsltContent) {
       updateXsltContent(updated)
@@ -1759,6 +1867,37 @@ function App() {
     setErrorMsg(undefined)
   }
 
+  // Detect the XML document type expected by a given XSLT template.
+  // Irsaliye (DespatchAdvice) templates need DespatchAdvice sample XML,
+  // invoice/archive templates need Invoice sample XML.
+  const getMatchingSampleXml = (xslt: string): string => {
+    if (!xslt) return DEFAULT_XML
+    const checks = [
+      /DespatchAdvice/i,
+      /DespatchLine/i,
+      /DespatchSupplierParty/i,
+      /ActualDespatchDate/i
+    ]
+    if (checks.some((re) => re.test(xslt))) {
+      return DEFAULT_DESPATCH_XML
+    }
+    return DEFAULT_XML
+  }
+
+  // Load a template and auto-fill the XML editor with the matching sample data.
+  // The XML is only replaced when it is empty or its type does not match the
+  // template, so an already-loaded matching document is never clobbered.
+  const loadTemplateWithSampleXml = (xslt: string) => {
+    const currentXml = xmlContent || ''
+    const isDespatchTemplate = /DespatchAdvice|DespatchLine|DespatchSupplierParty|ActualDespatchDate/i.test(xslt)
+    const xmlHasDespatch = currentXml.includes('DespatchAdvice') || currentXml.includes('DespatchLine')
+    const typeMatches = (isDespatchTemplate && xmlHasDespatch) || (!isDespatchTemplate && !xmlHasDespatch)
+    if (!currentXml.trim() || !typeMatches) {
+      updateXmlContent(getMatchingSampleXml(xslt))
+    }
+    updateXsltContent(xslt)
+  }
+
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
     document.body.style.cursor = 'col-resize'
@@ -1782,7 +1921,16 @@ function App() {
 
   // Embedded XSLT Check
   const embeddedXslt = extractEmbeddedXslt(xmlContent)
+  const xsltEmptyOrDefault = !xsltContent.trim() || xsltContent === DEFAULT_XSLT || xsltContent === SIMPLE_XSLT || xsltContent === EMPTY_XSLT
   const showXsltBanner = embeddedXslt !== null && embeddedXslt !== xsltContent && !hasDismissedXslt
+
+  // Auto-apply embedded XSLT when detected and editor has no custom template
+  useEffect(() => {
+    if (embeddedXslt && xsltEmptyOrDefault && !hasDismissedXslt && embeddedXslt !== xsltContent) {
+      updateXsltContent(embeddedXslt)
+      setHasDismissedXslt(true)
+    }
+  }, [embeddedXslt])
 
   const handleApplyEmbeddedXslt = () => {
     if (embeddedXslt) {
@@ -1864,8 +2012,7 @@ function App() {
                     const idx = parseInt(val.replace('custom-', ''))
                     const t = customTemplates[idx]
                     if (t) {
-                      updateXmlContent(DEFAULT_XML)
-                      updateXsltContent(t.content)
+                      loadTemplateWithSampleXml(t.content)
                     }
                   }
                 }}
@@ -2107,8 +2254,7 @@ function App() {
                       <button
                         key={idx}
                         onClick={() => {
-                          updateXmlContent(DEFAULT_XML)
-                          updateXsltContent(t.content)
+                          loadTemplateWithSampleXml(t.content)
                         }}
                         className="flex items-center justify-between p-2.5 rounded-lg border border-slate-850 bg-slate-900/30 hover:border-slate-700 hover:bg-slate-900/60 text-left transition duration-150 cursor-pointer text-xs"
                       >
@@ -2204,8 +2350,7 @@ function App() {
                   const idx = parseInt(val.replace('custom-', ''))
                   const t = customTemplates[idx]
                   if (t) {
-                    if (!xmlContent.trim()) updateXmlContent(DEFAULT_XML)
-                    updateXsltContent(t.content)
+                    loadTemplateWithSampleXml(t.content)
                   }
                 }
               }}
@@ -2280,6 +2425,16 @@ function App() {
               {errorMsg ? 'Hata Mevcut' : 'Sistem Hazır'}
             </span>
           </div>
+
+          {/* File sizes */}
+          <div className="hidden md:flex items-center gap-2 text-[10px] text-slate-500">
+            {xmlContent && (
+              <span>XML: {(xmlContent.length / 1024).toFixed(1)} KB</span>
+            )}
+            {xsltContent && (
+              <span>XSLT: {(xsltContent.length / 1024).toFixed(1)} KB</span>
+            )}
+          </div>
         </div>
       </header>
 
@@ -2335,8 +2490,13 @@ function App() {
               >
                 <FileCode className="h-3.5 w-3.5 text-blue-400" />
                 XML Verisi
-                {!validationStatus.xmlValid && (
-                  <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping" />
+                {validationStatus.xmlValid ? (
+                  <span className="text-[9px] text-emerald-400 ml-1">✓ Geçerli</span>
+                ) : (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping ml-1" />
+                    <span className="text-[9px] text-rose-400 ml-0.5">Hatalı</span>
+                  </>
                 )}
               </button>
               <button
@@ -2352,8 +2512,13 @@ function App() {
               >
                 <FileCode className="h-3.5 w-3.5 text-purple-400" />
                 XSLT Tasarımı
-                {!validationStatus.xsltValid && (
-                  <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping" />
+                {validationStatus.xsltValid ? (
+                  <span className="text-[9px] text-emerald-400 ml-1">✓ Geçerli</span>
+                ) : (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping ml-1" />
+                    <span className="text-[9px] text-rose-400 ml-0.5">Hatalı</span>
+                  </>
                 )}
               </button>
               <button
@@ -3241,6 +3406,12 @@ function App() {
                     </div>
                   </div>
                 )}
+                {validationStatus.typeMismatchWarning && (
+                  <div className="bg-amber-950/40 border-b border-amber-800 px-4 py-2 text-xs text-amber-300 flex items-start gap-2 shrink-0">
+                    <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>{validationStatus.typeMismatchWarning}</div>
+                  </div>
+                )}
 
                 {/* Monaco Instances */}
                 <div className="flex-1 min-h-0 bg-slate-950 relative">
@@ -3516,6 +3687,17 @@ function App() {
                 </button>
               )}
 
+              {previewActiveTab === 'preview' && (
+                <button
+                  onClick={() => setEditorActiveTab('designer')}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium border border-slate-800 transition cursor-pointer"
+                  title="Filigran ayarlarını ve görsel düzenleyiciyi açar."
+                >
+                  <Wand2 className="h-3.5 w-3.5" />
+                  Filigran
+                </button>
+              )}
+
               {previewActiveTab === 'html' && (
                 <button
                   onClick={handleCopyHtml}
@@ -3616,6 +3798,39 @@ function App() {
               </div>
             )}
 
+            {/* Contextual Element Toolbar — appears when an element is selected in preview */}
+            {previewActiveTab === 'preview' && selectedElementDetails?.xsltId && (
+              <div className="mb-2 px-3 py-2 bg-slate-900/60 border border-indigo-900/50 rounded-lg flex items-center justify-between text-xs shrink-0">
+                <span className="text-indigo-300 font-semibold text-[10px] flex items-center gap-1.5">
+                  <Target className="h-3 w-3" />
+                  Eleman Seçili
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleAddTextElement('', selectedElementDetails)}
+                    className="flex items-center gap-1 px-2 py-1 rounded bg-indigo-600/80 hover:bg-indigo-600 text-white text-[10px] font-bold transition cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" />
+                    İçine Ekle
+                  </button>
+                  <button
+                    onClick={handleEditTextElement}
+                    className="flex items-center gap-1 px-2 py-1 rounded bg-emerald-600/80 hover:bg-emerald-600 text-white text-[10px] font-bold transition cursor-pointer"
+                  >
+                    <Edit3 className="h-3 w-3" />
+                    Metni Düzenle
+                  </button>
+                  <button
+                    onClick={() => handleRemoveElement('', selectedElementDetails)}
+                    className="flex items-center gap-1 px-2 py-1 rounded bg-rose-600/80 hover:bg-rose-600 text-white text-[10px] font-bold transition cursor-pointer"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Sil
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Viewport Container */}
             <div className="flex-1 flex flex-row min-h-0 relative gap-3">
               
@@ -3650,7 +3865,7 @@ function App() {
                                 />
                               </label>
                               <button
-                                onClick={() => updateXmlContent(DEFAULT_XML)}
+                                onClick={() => updateXmlContent(getMatchingSampleXml(xsltContent))}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-200 hover:text-white text-xs font-semibold transition cursor-pointer"
                               >
                                 Örnek Veri Yükle

@@ -5,6 +5,7 @@ export interface ValidationStatus {
   xsltValid: boolean;
   xmlError?: string;
   xsltError?: string;
+  typeMismatchWarning?: string;
 }
 
 export interface SelectedElementDetails {
@@ -40,7 +41,7 @@ export interface EditorState {
   errorMsg: string | undefined;
   
   // Navigation & UI
-  editorActiveTab: 'xml' | 'xslt' | 'designer';
+  editorActiveTab: 'xml' | 'xslt' | 'designer' | 'imag-editor';
   previewActiveTab: 'preview' | 'html' | 'logs';
   editorLayout: 'tabbed' | 'split';
   autoRefresh: boolean;
@@ -100,7 +101,7 @@ export interface EditorActions {
   setErrorMsg: (error: string | undefined) => void;
   
   // Navigation
-  setEditorActiveTab: (tab: 'xml' | 'xslt' | 'designer') => void;
+  setEditorActiveTab: (tab: 'xml' | 'xslt' | 'designer' | 'imag-editor') => void;
   setPreviewActiveTab: (tab: 'preview' | 'html' | 'logs') => void;
   setEditorLayout: (layout: 'tabbed' | 'split') => void;
   setAutoRefresh: (auto: boolean) => void;
@@ -212,7 +213,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   setHtmlOutput: (html: string) => set({ htmlOutput: html }),
   setErrorMsg: (error: string | undefined) => set({ errorMsg: error }),
   
-  setEditorActiveTab: (tab: 'xml' | 'xslt' | 'designer') => set({ editorActiveTab: tab }),
+  setEditorActiveTab: (tab: 'xml' | 'xslt' | 'designer' | 'imag-editor') => set({ editorActiveTab: tab }),
   setPreviewActiveTab: (tab: 'preview' | 'html' | 'logs') => set({ previewActiveTab: tab }),
   setEditorLayout: (layout: 'tabbed' | 'split') => set({ editorLayout: layout }),
   setAutoRefresh: (auto: boolean) => set({ autoRefresh: auto }),

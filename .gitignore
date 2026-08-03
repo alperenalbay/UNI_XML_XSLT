@@ -28,3 +28,5 @@ public/templates/
 
 # Stray output file accidentally created by start.bat (a bracket name "]")
 ]
+
+testsprite_tests\tmp\config.json
