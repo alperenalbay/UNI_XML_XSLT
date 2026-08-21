@@ -1,79 +1,163 @@
-# UNI XML & XSLT Canlı Tasarım Editörü / Live Design Editor
-
 <div align="center">
-  <img src="https://img.shields.io/badge/Powered%20by-Google%20DeepMind%20Antigravity-blueviolet?style=for-the-badge&logo=google" alt="Antigravity AI">
-  <img src="https://img.shields.io/badge/Made%20with-AI%20Assisted-magenta?style=for-the-badge&logo=artificialintelligence" alt="AI Assisted">
-  <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React">
-  <img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite">
+
+# UNI XML & XSLT Canlı Tasarım Editörü
+
+**e-Fatura / e-Arşiv / UBL-TR XML faturaları için web tabanlı, tamamen istemci tarafında çalışan canlı XSLT tasarım editörü**
+
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white&labelColor=20232a)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white&labelColor=1a1a2e)](https://vite.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white&labelColor=1e2a3a)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white&labelColor=0f172a)](https://tailwindcss.com/)
+[![Zustand](https://img.shields.io/badge/Zustand-5-F97316?logo=zustand&logoColor=white&labelColor=1c1917)](https://zustand.docs.pmnd.rs/)
+[![Monaco Editor](https://img.shields.io/badge/Monaco_Editor-0098FF?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PHRleHQgeD0iMiIgeT0iMTgiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IndoaXRlIj48L3RleHQ+PC9zdmc+)](https://microsoft.github.io/monaco-editor/)
+[![Vitest](https://img.shields.io/badge/Vitest-6E9F18?logo=vitest&logoColor=white&labelColor=1a1a1a)](https://vitest.dev/)
+[![License: MIT](https://img.shields.io/badge/Lisans-MIT-yellow.svg)](LICENSE)
+
 </div>
 
 ---
 
-## 🇹🇷 Türkçe Tanıtım
+## 📖 Hakkında
 
-**UNI XML & XSLT**, e-Fatura, e-Arşiv ve UBL-TR standartlarındaki XML fatura verilerini XSLT şablonları ile canlı olarak görselleştiren, biçimlendiren ve tasarlayan web tabanlı, istemci taraflı (client-side) gelişmiş bir tasarım istasyonudur.
+**UNI XML & XSLT Canlı Tasarım Editörü**, Türkiye e-Dönüşüm standartlarına uygun **e-Fatura**, **e-Arşiv** ve **UBL-TR** XML faturalarınızı görsel olarak tasarlayabilmenizi sağlayan modern bir web uygulamasıdır.
 
-Hiçbir veriyi sunucuya göndermeden, tamamen tarayıcınızın yerel dönüştürme motoru (XSLTProcessor) yardımıyla çalışır ve gizliliği maksimum düzeyde korur.
+Uygulama **tamamen istemci tarafında (client-side)** çalışır; hiçbir veri sunucuya gönderilmez. XML dosyalarınız ve tasarım şablonlarınız yalnızca tarayıcınızda işlenir ve saklanır.
 
-### ✨ Temel Özellikler
-* **Canlı Dönüşüm & Önizleme:** XML ve XSLT dosyalarındaki en ufak kod değişikliklerini anında sağ taraftaki A4 baskı önizleme ekranında görebilirsiniz.
-* **Görsel Tasarımcı (WYSIWYG Stiler):** Kod yazmadan faturadaki tüm elemanların yazı boyutunu, rengini, hizalamasını, genişliğini ve boşluk (margin/padding) ayarlarını inline style enjeksiyon motoru sayesinde doğrudan görsel panelden yapabilirsiniz.
-* **Çift Tıklama veya "Metni Düzenle" Butonu ile Yazma:** Önizleme üzerindeki herhangi bir statik nota, başlığa veya metin kutusuna çift tıklayarak ya da sol paneldeki "Metni Düzenle" butonu yardımıyla metinleri doğrudan fatura üzerinde değiştirebilirsiniz. Notlar bölümü satır bazlı düzenlemeye uygun hale getirilmiştir.
-* **Dinamik Yerel Şablon Kütüphanesi:** Tasarladığınız faturanın son halini isim vererek proje dizinindeki `public/templates/` klasörüne kalıcı olarak kaydedebilir ve istediğinizde geri yükleyebilirsiniz. Klasöre dışarıdan atılan veya silinen XSLT dosyaları program tarafından otomatik olarak algılanır ve listelenir.
-* **Gelişmiş Yazıcı & Baskı Çıktısı:** Yazdırma esnasında faturanın çevresindeki gölgeleri, sayfa marjı bozulmalarını, zoom ölçeklerini ve seçim çerçevelerini dinamik `@media print` CSS kuralları yardımıyla temizler, A4 kağıda tam ölçekli ve kusursuz çıktı verir.
-* **Sessiz Koda Git (Inspector):** Önizleme ekranındaki bir elemana tıklayarak o elemanın XSLT kodundaki tam satırına anında odaklanabilirsiniz.
-* **Boş Alanlara Yeni Metin Ekleme:** Faturanın Alıcı, Satıcı veya Detay bölgelerine tek tıkla yeni metin kutuları yerleştirebilir, bunları görsel panelden özelleştirebilirsiniz.
-* **Gömülü XSLT Ayıklama:** XML dosyasında base64 formatında gömülü olan XSLT kodlarını otomatik tespit eder, tek tıkla şablon editörüne yükler veya XML'den temizler.
+## ✨ Özellikler
 
-### 🚀 Kolay Başlangıç (Tek Tıkla Çalıştır)
-Projeyi bilgisayarınıza indirdikten sonra terminal komutları yazmadan çalıştırmak için:
+- ⚡ **Canlı Dönüşüm (Live Transformation)** — XSLT kodunuzdaki her değişiklik anında önizlemede görünür
+- 🎨 **WYSIWYG Tasarımcı** — Görsel düzenleyici ile sürükle-bırak kolaylığında fatura tasarımı
+- ✏️ **Satır İçi Metin Düzenleme** — Önizleme üzerinde doğrudan metin düzenlemesi
+- 📚 **Yerel Şablon Kütüphanesi** — Hazır şablonları kaydedin, tekrar kullanın (tarayıcı yerel deposunda)
+- 🖨️ **Kusursuz A4 Baskı** — Yazdırma için optimize edilmiş, milimetrik hassasiyette A4 çıktı
+- 🔍 **Kod İnceleyici (Code Inspector)** — Monaco Editor ile gelişmiş XSLT/XML kod düzenleme
+- 🌗 **5 Farklı Tema** — 3 koyu, 2 açık tema ile göz dostu çalışma ortamı
+- 📤 **Gömülü XSLT Çıkarma** — PDF/XML içindeki gömülü XSLT stillerini otomatik ayıklayın
+- 🔒 **%100 Gizlilik** — Tüm işlemler tarayıcınızda gerçekleşir, veriler asla dışarı çıkmaz
 
-* **Windows Kullanıcıları:**
-  Kök dizindeki **`start.bat`** dosyasına çift tıklayın. Node.js yüklü ise gerekli bağımlılıklar kurulacak ve tarayıcınız otomatik olarak açılacaktır.
+## 🚀 Hızlı Başlangıç
 
-* **macOS & Linux Kullanıcıları:**
-  Terminali açıp proje klasörüne gidin ve şu komutları sırasıyla çalıştırın:
-  ```bash
-  chmod +x start.sh
-  ./start.sh
-  ```
+### Gereksinimler
+
+- [Node.js](https://nodejs.org/) 20 veya üzeri
+
+### Kolay Kurulum
+
+**Windows:**
+
+```bash
+start.bat
+```
+
+**macOS / Linux:**
+
+```bash
+./start.sh
+```
+
+### Manuel Kurulum
+
+```bash
+# Depoyu klonlayın
+git clone https://github.com/alperenalbay/UNI_XML_XSLT.git
+cd UNI_XML_XSLT
+
+# Bağımlılıkları yükleyin
+npm install
+
+# Geliştirme sunucusunu başlatın
+npm run dev
+```
+
+Tarayıcınızda `http://localhost:5173` adresini açın. Hazır! 🎉
+
+### Üretim Derlemesi
+
+```bash
+npm run build
+npm run preview
+```
+
+## 💡 Kullanım
+
+1. **XML Yükleme** — e-Fatura / e-Arşiv / UBL-TR XML dosyanızı uygulamaya sürükleyip bırakın veya seçin
+2. **Şablon Seçimi** — Yerel şablon kütüphanesinden hazır bir tasarım seçin veya sıfırdan başlayın
+3. **Görsel Tasarım** — WYSIWYG editör ile tasarımınızı özelleştirin; satır içi metin düzenlemeyi kullanın
+4. **XSLT Düzenleme** — Kod inceleyicide XSLT üzerinde ince ayarlar yapın, değişiklikler anında yansır
+5. **Baskı / Dışa Aktarma** — Kusursuz A4 baskı ile faturanızı yazdırın veya kaydedin
+
+> 🔐 **Not:** Tüm işlemler tarayıcınızda gerçekleşir. Dosyalarınız hiçbir sunucuya yüklenmez.
+
+## 📁 Proje Yapısı
+
+```
+UNI_XML_XSLT/
+├── src/
+│   ├── components/        # React bileşenleri
+│   ├── stores/            # Zustand durum yönetimi
+│   ├── utils/             # Yardımcı fonksiyonlar
+│   ├── themes/            # Tema tanımlamaları
+│   └── templates/         # Varsayılan XSLT şablonları
+├── tests/                 # Vitest test dosyaları
+├── public/                # Statik varlıklar
+├── start.bat              # Windows hızlı başlatma
+├── start.sh               # macOS/Linux hızlı başlatma
+├── LICENSE                # MIT Lisansı
+├── CHANGELOG.md           # Sürüm geçmişi
+└── package.json
+```
+
+## 🛠️ Teknolojiler
+
+| Teknoloji | Sürüm | Amaç |
+|-----------|-------|------|
+| [React](https://react.dev/) | 19 | Kullanıcı arayüzü |
+| [Vite](https://vite.dev/) | 8 | Derleme ve geliştirme aracı |
+| [TypeScript](https://www.typescriptlang.org/) | 6 | Tip güvenli JavaScript |
+| [Tailwind CSS](https://tailwindcss.com/) | 4 | Hızlı stil geliştirme |
+| [Zustand](https://zustand.docs.pmnd.rs/) | 5 | Durum yönetimi |
+| [Monaco Editor](https://microsoft.github.io/monaco-editor/) | — | Kod düzenleyici |
+| [Vitest](https://vitest.dev/) | — | Birim testleri |
+
+## 🧪 Testler
+
+Projede [Vitest](https://vitest.dev/) ile yazılmış birim testleri bulunur:
+
+```bash
+# Testleri çalıştır
+npm run test
+
+# Watch modunda çalıştır
+npm run test:watch
+
+# Kapsam raporu ile çalıştır
+npm run test:coverage
+```
+
+## 🤝 Katkı Sağlama
+
+Katkılarınız memnuniyetle karşılanır! 🎉
+
+1. Depoyu fork edin
+2. Yeni bir dal oluşturun (`git checkout -b feature/harika-ozellik`)
+3. Değişikliklerinizi commit edin (`git commit -m 'feat: harika özellik eklendi'`)
+4. Dalınızı push edin (`git push origin feature/harika-ozellik`)
+5. Pull Request açın
+
+Hata bildirimleri ve özellik önerileri için [Issues](https://github.com/alperenalbay/UNI_XML_XSLT/issues) sekmesini kullanabilirsiniz.
+
+## 📄 Lisans
+
+Bu proje [MIT Lisansı](LICENSE) altında lisanslanmıştır. Detaylar için `LICENSE` dosyasını inceleyebilirsiniz.
+
+Sürüm geçmişi için [CHANGELOG.md](CHANGELOG.md) dosyasına bakabilirsiniz.
 
 ---
 
-## 🇺🇸 English Description
+<div align="center">
 
-**UNI XML & XSLT** is a web-based, client-side advanced design station that visualizes, formats, and designs XML invoice data in e-Invoice, e-Archive, and UBL-TR standards using XSLT templates.
+🤖 Bu proje **Google DeepMind Antigravity** yapay zekâ desteğiyle geliştirilmiştir.
 
-It runs entirely within your browser using the local conversion engine (XSLTProcessor) without sending any data to a server, ensuring maximum privacy.
+⭐ Projeyi beğendiyseniz yıldız vermeyi unutmayın!
 
-### ✨ Key Features
-* **Live Transformation & Preview:** Instantly see any code changes in XML and XSLT files on the right-hand A4 print preview screen.
-* **Visual Designer (WYSIWYG Styler):** Visually adjust font sizes, colors, alignments, widths, and padding/margin styles for any element directly on the panel using our inline style injection engine.
-* **Inline Text Editing & "Edit Text" Button:** Change text contents of any note, static title, or text box directly on the invoice using the "Edit Text" button or by double-clicking it. The invoice notes section is optimized for row-by-row selection and editing.
-* **Local Template Library:** Save your custom designs with a name into the project's `public/templates/` folder and load them instantly. The application automatically detects, lists, and watches XSLT templates added or removed externally in Windows Explorer.
-* **Perfect Print Output:** Removes preview shadow borders, page margin offsets, zoom transformations, and selector glows using dynamic `@media print` CSS rules, providing a clean, edge-to-edge A4 print.
-* **Silent Jump to Code (Inspector):** Click any element on the preview screen to instantly focus on its exact line within the XSLT code editor.
-* **Add Text Boxes to Empty Spaces:** Insert new editable text boxes (divs) into the Customer, Supplier, or Invoice details columns with a single click, and customize them using the visual panel.
-* **Embedded XSLT Extraction:** Automatically detects base64-encoded embedded XSLT templates inside XML documents and lets you load them into the editor or remove them with one click.
-
-### 🚀 Quick Start (One-Click Launch)
-After downloading the project to your computer, to run it without manually typing terminal commands:
-
-* **Windows Users:**
-  Double-click the **`start.bat`** file in the root directory. If Node.js is installed, it will automatically install dependencies and launch the browser.
-
-* **macOS & Linux Users:**
-  Open terminal, navigate to the project directory, and run the following commands:
-  ```bash
-  chmod +x start.sh
-  ./start.sh
-  ```
-
----
-
-## 🤖 Yapay Zeka Katkı Etiketi / AI Contribution Badge
-
-> [!NOTE]
-> Bu projenin görsel tasarımı, WYSIWYG düzenleyicisi, XSLT ayrıştırma algoritmaları ve çift yönlü senkronizasyon yetenekleri **Google DeepMind Antigravity AI** yazılım asistanı yardımıyla tasarlanmış, optimize edilmiş ve doğrulanmıştır.
-> 
-> This project's visual UI, WYSIWYG styler, XSLT parsing algorithms, and bidirectional editor synchronization capabilities have been designed, optimized, and verified with the assistance of **Google DeepMind Antigravity AI** coding assistant.
+</div>

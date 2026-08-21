@@ -1,0 +1,44 @@
+==============================================================
+TESTSPRITE - XSLT desing Otomatik Test - Devam Notu
+==============================================================
+Tarih: 28.07.2026
+Durum: API anahtarı opencode.jsonc içine yazıldı, opencode yeniden başlatılması bekleniyor.
+
+YAPILACAKLAR (sırasıyla):
+1. testsprite_check_account_info çağr -> bağlantı doğrula
+2. XSLT desing projesini PRODUCTION modunda çalıştır:
+     - workdir: C:\Users\Devatek_06\Desktop\projects\XSLT desing
+     - komut: npm run build && npm run preview
+     - port: 5173 (preview default)  -> 4173 olabilir, kontrol et
+     NOT: vite preview default 4173 portundadr. localPort ona göre verilmeli.
+     Test edeceğimiz için local sunucunun ÇALIŞIYOR olması gerek.
+     Ayr bir terminalde/arka planda çalıştr veya kullanıcıya açtr.
+3. testsprite_bootstrap:
+     projectPath: C:\Users\Devatek_06\Desktop\projects\XSLT desing
+     type: frontend
+     localPort: 4173 (preview) ya da 5173 (dev) -> hangisi açıksa onu kullan
+     testScope: codebase
+4. testsprite_generate_frontend_test_plan:
+     projectPath: aynı
+     needLogin: false  (bu projede login yok)
+5. testsprite_generate_code_and_execute:
+     projectName: xslt-desing  (package.json içindeki "name" -> aslında "xslt-desing", dosya adı "XSLT desing" boşluklu)
+     projectPath: aynı
+     testIds: []  (boş = tüm plan)
+     additionalInstruction: "XSLT editör arayüzündeki tüm butonları ve işlevleri kontrol et: editör, önizleme, WYSIWYG mod, inline stil/metin enjeksiyonu, şablon kaydetme, şablon listeleme, sürüm kontrolü/güncelleme butonu, tema değiştirme, zoom ve yazdrma işlevleri. Butonların görünürlüğünü, tıklanabilirliğini ve doğru tepki verdiğini doğrula."
+     serverMode: production
+6. Sonuç markdown raporu (rapor dosyasını yaz/oku -> kullanıcıya özet ver)
+
+KRİTİK HATIRLATMALAR (CONTEXT.md kuralları):
+- XSLT DOM data-xslt-id eşleme mekanizmasına DOKUNMA
+- Client-side XSLTProcessor dönüşümü korunmalı (sunucu tarafı dönüşüm EKLENMEZ)
+- @media print yazdrma stilleri değiştirmez
+- vite.config.ts içindeki /api/* uç noktaların bozma
+- Zoom iframe body'ye uygulanmalı
+
+PROJE YOLU: C:\Users\Devatek_06\Desktop\projects\XSLT desing
+PACKAGE NAME: xslt-desing (package.json)  /  Klasör adı: "XSLT desing" (boşluklu)
+GIRIŞ/LOGIN: YOK (needLogin = false)
+
+API ANAHTARI: opencode.jsonc içinde TESTSPRITE_API_KEY olarak zaten kaytlı.
+==============================================================

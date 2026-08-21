@@ -1,0 +1,303 @@
+version: "2"
+type: frontend
+tech_stack:
+  - React 19
+  - TypeScript 6
+  - Vite 8
+  - Tailwind CSS v4
+  - Zustand 5
+  - Monaco Editor
+  - Lucide React Icons
+  - Vitest
+routes:
+  - path: /
+    file: src/App.tsx
+    auth_required: false
+    description: Ana uygulama - XML/XSLT editör, canlı önizleme, WYSIWYG tasarım ve şablon yönetimi
+features:
+  - name: Live XSLT Transformation
+    description: Client-side XML+XSLT to HTML using XSLTProcessor with debounced auto-refresh
+    files:
+      - src/utils/xsltTransformer.ts
+      - src/hooks/useXsltTransform.ts
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - Type XML code in Monaco editor
+      - Type XSLT code in Monaco editor
+      - See live preview update automatically in iframe
+      - Toggle auto-refresh checkbox on/off
+      - Click Dönüştür button for manual transform
+    api_calls: []
+    auth_required: false
+  - name: Monaco Code Editors
+    description: Two Monaco editor instances for XML and XSLT with split/tabbed layout
+    files:
+      - src/App.tsx
+      - src/components/EditorToolbar.tsx
+      - src/components/EditorPanel.tsx
+    entry_route: /
+    user_interactions:
+      - Switch between XML/XSLT tabs
+      - Toggle split/tabbed layout
+      - Type code in editors with syntax highlighting
+      - View validation errors inline
+    api_calls: []
+    auth_required: false
+  - name: A4 Preview with Zoom
+    description: Live preview of transformed HTML in iframe with zoom controls
+    files:
+      - src/components/PreviewPanel.tsx
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - View live preview in A4 iframe
+      - Adjust zoom slider 30-150%
+      - Click Zoom In/Zoom Out buttons
+      - Toggle Auto Fit button
+      - Switch to HTML output tab
+      - Switch to Logs tab
+    api_calls: []
+    auth_required: false
+  - name: WYSIWYG Designer Mode
+    description: Visual style editing by clicking elements in preview
+    files:
+      - src/components/DesignerPanel.tsx
+      - src/hooks/useInspector.ts
+      - src/utils/xsltTransformer.ts
+      - src/utils/xsltIdUtils.ts
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - Click an element in preview to select it
+      - Adjust font size with range slider
+      - Toggle bold/italic/underline
+      - Change text color with color picker
+      - Set alignment (left/center/right/justify)
+      - Adjust padding and margin with sliders
+      - Set width with unit toggle (%/px/auto)
+      - Toggle text wrapping
+      - Apply border styles
+      - Click Bu Elemanı Sil to remove element
+      - Click İçine Ekle to add new element
+    api_calls: []
+    auth_required: false
+  - name: Inspector Mode
+    description: Click preview element to jump to its XSLT source line
+    files:
+      - src/hooks/useInspector.ts
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - Toggle Koda Git button
+      - Click element in preview
+      - See cursor jump to corresponding line in XSLT editor
+    api_calls: []
+    auth_required: false
+  - name: Inline Text Editing
+    description: Double-click text in preview to edit directly
+    files:
+      - src/utils/xsltTransformer.ts
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - Double-click text in preview
+      - Type new text inline
+      - Click Metni Düzenle button
+      - See changes reflected in XSLT code
+    api_calls: []
+    auth_required: false
+  - name: Image Management
+    description: View, replace, resize and reposition images in XSLT
+    files:
+      - src/App.tsx
+      - src/utils/xsltTransformer.ts
+    entry_route: /
+    user_interactions:
+      - Click Yeni Görsel Ekle to add image
+      - Click Değiştir to replace image file
+      - Adjust image width with slider/input
+      - Set image alignment
+      - Set image margin
+      - Toggle display/float settings
+      - Click trash icon to remove image
+    api_calls: []
+    auth_required: false
+  - name: Image Drag and Drop
+    description: Drag images in preview to reposition them
+    files:
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - Switch to Görsel Düzenleyici tab
+      - Drag image in preview to new position
+      - Click Değişiklikleri Kaydet to apply
+      - Click Sıfırla to reset pending changes
+    api_calls: []
+    auth_required: false
+  - name: Column Resizing
+    description: Drag column resizer handles in tables to adjust column widths
+    files:
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - Enter designer mode
+      - Drag column resizer handle in table preview
+      - See column width update live
+    api_calls: []
+    auth_required: false
+  - name: Watermark System
+    description: Add watermark overlay images to invoice design
+    files:
+      - src/components/WatermarkPanel.tsx
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - Enter watermark text (e.g. ÖDENDİ)
+      - Select watermark color
+      - Upload watermark image
+      - Adjust rotation with slider (-180 to 180)
+      - Adjust size with slider (5-100%)
+      - Adjust opacity with slider (0-100%)
+      - Toggle visibility checkbox
+      - Click XSLT'ye Kaydet to save to XSLT
+      - Click Kaldır to remove from XSLT
+    api_calls: []
+    auth_required: false
+  - name: Template Library
+    description: Save and load XSLT templates from local disk
+    files:
+      - src/hooks/useTemplates.ts
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - Click Şablon Kütüphanesi dropdown
+      - Select a template to load
+      - Type template name in input field
+      - Click Şablonlara Kaydet to save
+      - Click refresh icon to reload list
+    api_calls:
+      - method: GET
+        endpoint: /api/list-templates
+      - method: POST
+        endpoint: /api/save-template
+    auth_required: false
+  - name: Auto-Updater
+    description: Check for and apply git-based updates
+    files:
+      - src/hooks/useUpdates.ts
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - Click update notification button when available
+      - Click Şimdi Denetle to manually check
+    api_calls:
+      - method: GET
+        endpoint: /api/check-update
+      - method: POST
+        endpoint: /api/trigger-update
+    auth_required: false
+  - name: Theme Switcher
+    description: Switch between 5 visual themes
+    files:
+      - src/App.tsx
+      - src/index.css
+    entry_route: /
+    user_interactions:
+      - Click one of 5 theme color buttons
+      - See entire UI theme change instantly
+    api_calls: []
+    auth_required: false
+  - name: File Upload/Download
+    description: Upload XML/XSLT files and download output
+    files:
+      - src/hooks/useFileOps.ts
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - Click XML Yükle/XSLT Yükle to upload files
+      - Drag and drop files onto workspace
+      - Click Yazdır/PDF for print
+      - Click HTML Kopyala to copy output
+      - Click Dosya İndir to download files
+    api_calls: []
+    auth_required: false
+  - name: Embedded XSLT Detection
+    description: Detects base64-encoded XSLT inside XML and offers to load it
+    files:
+      - src/App.tsx
+      - src/utils/xsltTransformer.ts
+    entry_route: /
+    user_interactions:
+      - See prompt when embedded XSLT is detected
+      - Click Tasarımı Şablona Yükle to load it
+      - Click Yoksay to ignore
+      - Click XML'den Kaldır to remove from XML
+    api_calls: []
+    auth_required: false
+  - name: Quick Jump Navigation
+    description: Jump to sections in XSLT code with category buttons
+    files:
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - Click CSS button to jump to CSS section
+      - Click Satıcı button to jump to supplier section
+      - Click Alıcı button to jump to customer section
+      - Click Fatura No button to jump to invoice number
+      - Click Ürünler button to jump to items
+      - Click Toplamlar button to jump to totals
+    api_calls: []
+    auth_required: false
+  - name: Print Support
+    description: A4 print formatting with clean styles
+    files:
+      - src/App.tsx
+    entry_route: /
+    user_interactions:
+      - Click Yazdır/PDF button
+      - See print dialog with A4 formatted output
+    api_calls: []
+    auth_required: false
+  - name: Status Panel
+    description: System status, validation, file sizes, template list
+    files:
+      - src/components/StatusPanel.tsx
+    entry_route: /
+    user_interactions:
+      - View XML validation status
+      - View XSLT validation status
+      - View file sizes
+      - View saved template list
+      - See update available notification
+    api_calls:
+      - method: GET
+        endpoint: /api/list-templates
+      - method: GET
+        endpoint: /api/check-update
+    auth_required: false
+known_limitations:
+  - issue: All data held in Zustand (in-memory). Page refresh loses unsaved work.
+    location: src/store/editorStore.ts
+    impact: User must save templates before refresh
+  - issue: Zustand selectedElement may be stale compared to App.tsx local state
+    location: src/store/editorStore.ts + src/App.tsx
+    impact: Dual state management can cause selection inconsistencies
+  - issue: Watermark preview-only until user clicks XSLT'ye Kaydet
+    location: src/components/WatermarkPanel.tsx
+    impact: Watermark changes not automatically persisted
+  - issue: Image transforms pending until Değişiklikleri Kaydet
+    location: src/App.tsx
+    impact: Dragged image positions not auto-saved
+  - issue: No undo/redo system
+    location: src/App.tsx
+    impact: Changes cannot be reverted without manual editing
+  - issue: EditorToolbar and EditorPanel components may not be fully wired
+    location: src/components/EditorToolbar.tsx, src/components/EditorPanel.tsx
+    impact: Modular components exist but App.tsx inlines UI directly
+  - issue: Auto-updater requires git remote to work
+    location: src/hooks/useUpdates.ts
+    impact: Silently reports no update if git not configured
+  - issue: data-xslt-id is ephemeral - regenerated each render
+    location: src/utils/xsltIdUtils.ts
+    impact: IDs change between sessions (intentional)

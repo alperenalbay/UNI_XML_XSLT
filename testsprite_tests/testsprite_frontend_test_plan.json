@@ -1,0 +1,1464 @@
+[
+  {
+    "id": "TC001",
+    "title": "Load XSLT into the editor",
+    "description": "This verifies that importing an XSLT file populates the XSLT editor with the file contents.",
+    "category": "File Upload and Output Download",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the XSLT upload control"
+      },
+      {
+        "type": "action",
+        "description": "Upload a valid XSLT file"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the XSLT content is displayed in the editor"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "Transform XML and XSLT into a live invoice preview",
+    "description": "This test verifies that entering valid XML and XSLT produces a live transformed invoice preview in the A4 frame.",
+    "category": "Live XSLT Transformation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XML into the XML editor"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XSLT into the XSLT editor"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the invoice preview is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify transformed invoice content is visible in the preview"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Load XML into the editor",
+    "description": "This verifies that importing an XML file populates the XML editor with the file contents.",
+    "category": "File Upload and Output Download",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the XML upload control"
+      },
+      {
+        "type": "action",
+        "description": "Upload a valid XML file"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the XML content is displayed in the editor"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC004",
+    "title": "Drag XML or XSLT files into the workspace",
+    "description": "This verifies that dropping supported files onto the workspace loads them into the appropriate editors.",
+    "category": "File Upload and Output Download",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Drag and drop a valid XML file onto the workspace"
+      },
+      {
+        "type": "action",
+        "description": "Drag and drop a valid XSLT file onto the workspace"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify both files are loaded into the editors"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC005",
+    "title": "Refresh the preview manually after disabling auto-refresh",
+    "description": "This test verifies that turning off auto-refresh and using manual transform still updates the invoice preview correctly.",
+    "category": "Live XSLT Transformation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XML into the XML editor"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XSLT into the XSLT editor"
+      },
+      {
+        "type": "action",
+        "description": "Turn off auto-refresh"
+      },
+      {
+        "type": "action",
+        "description": "Click the manual transform control"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the invoice preview is updated"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify transformed invoice content is visible in the preview"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC006",
+    "title": "Open print or PDF output",
+    "description": "This verifies that the user can open the print flow for the current invoice with A4-formatted output.",
+    "category": "File Upload and Output Download",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to open print or PDF output"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the print preview or print dialog opens with A4-formatted output"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC007",
+    "title": "Open the print-friendly invoice view",
+    "description": "This test verifies that the print action opens a print-friendly invoice view with A4-oriented formatting for output.",
+    "category": "Print Support",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the print or PDF action"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a print-friendly invoice view is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify A4-oriented print formatting is visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC008",
+    "title": "Edit rendered invoice text inline and keep it in sync",
+    "description": "Verifies that inline editing from the preview updates the displayed text and remains reflected in the source workflow.",
+    "category": "Inline Text Editing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Double-click text in the invoice preview"
+      },
+      {
+        "type": "action",
+        "description": "Type new text inline"
+      },
+      {
+        "type": "action",
+        "description": "Commit the inline text edit"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the preview shows the updated text content"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the edited text remains reflected in the invoice editing workflow"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC009",
+    "title": "Show validation feedback for invalid XSLT syntax",
+    "description": "This test verifies that invalid XSLT input surfaces validation feedback and does not produce a successful transformed invoice preview.",
+    "category": "Monaco XML/XSLT Editor",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XML into the XML editor"
+      },
+      {
+        "type": "action",
+        "description": "Type invalid XSLT into the XSLT editor"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify transformed invoice content is not visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC010",
+    "title": "Save and reload a local template from the template library",
+    "description": "This test verifies that a modified template can be saved locally and loaded again from the template library.",
+    "category": "template library save/load",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XML into the XML editor"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XSLT into the XSLT editor"
+      },
+      {
+        "type": "action",
+        "description": "Open the template library"
+      },
+      {
+        "type": "action",
+        "description": "Save the current template to the library"
+      },
+      {
+        "type": "action",
+        "description": "Load the saved template from the library"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the loaded template is displayed in the editor and preview"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the template content matches the saved design"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC011",
+    "title": "Style previewed invoice text and persist the visual change",
+    "description": "Verifies that selecting a preview element and adjusting its visual styling updates the rendered invoice as expected.",
+    "category": "WYSIWYG Designer Mode",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click an element in the invoice preview"
+      },
+      {
+        "type": "action",
+        "description": "Adjust the selected element's font size"
+      },
+      {
+        "type": "action",
+        "description": "Change the selected element's text color"
+      },
+      {
+        "type": "action",
+        "description": "Set the selected element's alignment"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the preview reflects the updated styling on the selected invoice content"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC012",
+    "title": "Detect embedded XSLT and load the design",
+    "description": "This verifies that XML with embedded XSLT is detected and can be loaded into the template design.",
+    "category": "Embedded XSLT Detection",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Load an XML file that contains embedded XSLT"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to load the embedded design into the template"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the embedded design is loaded into the editor"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC013",
+    "title": "Load a saved template from the library",
+    "description": "Verifies that selecting a saved template loads it into the editor and preview.",
+    "category": "Template Library",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Open the template library dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Select a saved template"
+      },
+      {
+        "type": "action",
+        "description": "Load the selected template into the editor"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the loaded template content is displayed in the editor"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the invoice preview updates to match the loaded template"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC014",
+    "title": "Switch between XML and XSLT editing modes",
+    "description": "This test verifies that the user can move between XML and XSLT tabs and continue editing both source documents.",
+    "category": "Monaco XML/XSLT Editor",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Switch to the XML editor tab"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XML into the XML editor"
+      },
+      {
+        "type": "action",
+        "description": "Switch to the XSLT editor tab"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XSLT into the XSLT editor"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify both editors contain editable source content"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the preview area remains available"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC015",
+    "title": "Jump from preview selection to XSLT source in inspector mode",
+    "description": "Verifies that enabling inspector mode and selecting a preview element moves the code editor to the corresponding XSLT source location.",
+    "category": "Inspector Mode",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Turn on Koda Git mode"
+      },
+      {
+        "type": "action",
+        "description": "Click an element in the invoice preview"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the XSLT editor jumps to the linked source location for the selected element"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC016",
+    "title": "Save the current template to the library",
+    "description": "Verifies that entering a template name and saving stores the current template for later reuse.",
+    "category": "Template Library",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type a unique template name"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to save the template to the library"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a saved template confirmation is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new template appears in the template library"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC017",
+    "title": "Edit invoice text directly in the preview and persist it back to source",
+    "description": "This test verifies that inline text editing in the preview updates the invoice content and can be persisted back into the underlying XSLT source.",
+    "category": "A4 Preview and Zoom Controls",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XML into the XML editor"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XSLT into the XSLT editor"
+      },
+      {
+        "type": "action",
+        "description": "Click the invoice text in the preview to edit it inline"
+      },
+      {
+        "type": "action",
+        "description": "Type updated invoice text into the inline editor"
+      },
+      {
+        "type": "action",
+        "description": "Save the inline edit back to the source"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated invoice text is visible in the preview"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the edited content remains reflected in the invoice source view"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC018",
+    "title": "Open text editing controls for the selected preview text",
+    "description": "Verifies that the inline text editing action makes the selected text editable through the editor controls.",
+    "category": "Inline Text Editing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click a text element in the invoice preview"
+      },
+      {
+        "type": "action",
+        "description": "Click Metni Düzenle"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected text becomes editable in the preview"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC019",
+    "title": "Use split layout to review code and preview together",
+    "description": "This test verifies that the split workspace layout shows the editors and preview together for simultaneous refinement.",
+    "category": "Monaco XML/XSLT Editor",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Toggle the split workspace layout"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XML into the XML editor"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XSLT into the XSLT editor"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the code editors are visible alongside the preview"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify transformed invoice content is visible in the preview"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC020",
+    "title": "Apply emphasis styling to selected invoice text",
+    "description": "Verifies that bold, italic, and underline toggles update the selected preview text correctly.",
+    "category": "WYSIWYG Designer Mode",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click an element in the invoice preview"
+      },
+      {
+        "type": "action",
+        "description": "Toggle bold styling for the selected element"
+      },
+      {
+        "type": "action",
+        "description": "Toggle italic styling for the selected element"
+      },
+      {
+        "type": "action",
+        "description": "Toggle underline styling for the selected element"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected preview text displays the applied emphasis styles"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC021",
+    "title": "Preview watermark changes immediately",
+    "description": "Verifies that configuring a watermark updates the invoice preview with the chosen watermark settings.",
+    "category": "Watermark System",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Enter watermark text with a unique value"
+      },
+      {
+        "type": "action",
+        "description": "Select a watermark color"
+      },
+      {
+        "type": "action",
+        "description": "Adjust the watermark rotation to a visible angle"
+      },
+      {
+        "type": "action",
+        "description": "Adjust the watermark size to a visible value"
+      },
+      {
+        "type": "action",
+        "description": "Adjust the watermark opacity to a visible value"
+      },
+      {
+        "type": "action",
+        "description": "Toggle watermark visibility on"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the invoice preview shows the configured watermark"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC022",
+    "title": "Add an image to the invoice template",
+    "description": "This test verifies that a user can add a new image asset and see it appear in the invoice preview.",
+    "category": "Image Management",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to add a new image"
+      },
+      {
+        "type": "action",
+        "description": "Add a valid image file"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the image is displayed in the design preview"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC023",
+    "title": "Remove a selected invoice element from the preview",
+    "description": "Verifies that deleting the selected preview element removes it from the rendered invoice.",
+    "category": "WYSIWYG Designer Mode",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click an element in the invoice preview"
+      },
+      {
+        "type": "action",
+        "description": "Click Bu Elemanı Sil"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected element is no longer visible in the preview"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC024",
+    "title": "Apply a style change from the preview designer",
+    "description": "This test verifies that changing a visible invoice style in designer mode updates the preview layout as expected.",
+    "category": "A4 Preview and Zoom Controls",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XML into the XML editor"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XSLT into the XSLT editor"
+      },
+      {
+        "type": "action",
+        "description": "Select an invoice element in the preview"
+      },
+      {
+        "type": "action",
+        "description": "Change a visible style property for the selected element"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected invoice element reflects the style change"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated styling is visible in the preview"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC025",
+    "title": "Insert a nested element into the selected invoice region",
+    "description": "Verifies that adding a nested element from the preview creates a new visible element in the design.",
+    "category": "WYSIWYG Designer Mode",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click an element in the invoice preview"
+      },
+      {
+        "type": "action",
+        "description": "Click İçine Ekle"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a new nested element appears in the preview within the selected area"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC026",
+    "title": "Replace the selected image",
+    "description": "This test verifies that a user can replace an existing image and see the updated image in the preview.",
+    "category": "Image Management",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to add a new image"
+      },
+      {
+        "type": "action",
+        "description": "Add a valid image file"
+      },
+      {
+        "type": "action",
+        "description": "Select the image in the preview"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to replace the selected image"
+      },
+      {
+        "type": "action",
+        "description": "Add a different valid image file"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected image has been updated in the design preview"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC027",
+    "title": "Save watermark into the template source",
+    "description": "Verifies that saving watermark settings persists them into the XSLT so they remain part of the template.",
+    "category": "Watermark System",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Enter watermark text with a unique value"
+      },
+      {
+        "type": "action",
+        "description": "Select a watermark color"
+      },
+      {
+        "type": "action",
+        "description": "Toggle watermark visibility on"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to save the watermark into the XSLT"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the watermark is present in the saved template source"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC028",
+    "title": "Download the current output file",
+    "description": "This verifies that the user can trigger a download of the current invoice output from the app.",
+    "category": "File Upload and Output Download",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to download the current file output"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the download action is triggered"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC029",
+    "title": "Copy the generated HTML output",
+    "description": "This verifies that the current transformed invoice HTML can be copied for reuse.",
+    "category": "File Upload and Output Download",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to copy the generated HTML output"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a copy confirmation is visible"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC030",
+    "title": "Show status information for validation and saved templates",
+    "description": "This test verifies that the status panel shows validation, file size, and saved template information so the user can review workspace health at a glance.",
+    "category": "Status Panel",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify XML validation status is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify XSLT validation status is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify file size information is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify saved template information is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC031",
+    "title": "Detect embedded XSLT and remove it from the XML",
+    "description": "This verifies that embedded XSLT can be removed from the loaded XML when the user chooses to clean the file.",
+    "category": "Embedded XSLT Detection",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Load an XML file that contains embedded XSLT"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to remove the embedded design from the XML"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the embedded design is removed from the XML content"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC032",
+    "title": "Resize a table column in the designer",
+    "description": "This test verifies that a user can adjust a table column width in designer mode and see the updated column size in the preview.",
+    "category": "Column Resizing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Enter designer mode"
+      },
+      {
+        "type": "action",
+        "description": "Drag a table column resizer handle"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the table column width changes in the preview"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC033",
+    "title": "Remove watermark from the template source",
+    "description": "Verifies that removing the watermark clears it from the template and preview.",
+    "category": "Watermark System",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Enter watermark text with a unique value"
+      },
+      {
+        "type": "action",
+        "description": "Select a watermark color"
+      },
+      {
+        "type": "action",
+        "description": "Toggle watermark visibility on"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to remove the watermark from the XSLT"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the watermark no longer appears in the preview"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the template source no longer contains the watermark"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC034",
+    "title": "Show the generated HTML output for the transformed invoice",
+    "description": "This test verifies that the HTML output view displays the generated markup for the current invoice template.",
+    "category": "A4 Preview and Zoom Controls",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XML into the XML editor"
+      },
+      {
+        "type": "action",
+        "description": "Type valid invoice XSLT into the XSLT editor"
+      },
+      {
+        "type": "action",
+        "description": "Switch to the HTML output view"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the generated HTML output is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify transformed invoice markup is visible"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC035",
+    "title": "Detect embedded XSLT and continue without it",
+    "description": "This verifies that embedded XSLT can be ignored so the user can continue working with the XML only.",
+    "category": "Embedded XSLT Detection",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Load an XML file that contains embedded XSLT"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to ignore the embedded design"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the XML remains loaded without applying the embedded design"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC036",
+    "title": "Jump to CSS section from quick navigation",
+    "description": "This test verifies that selecting the CSS shortcut moves the code editor to the CSS section so the user can quickly reach styling code.",
+    "category": "Quick Jump Navigation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the CSS shortcut"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the code editor shows the CSS section"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the CSS section is the active focus area"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC037",
+    "title": "Adjust image layout properties",
+    "description": "This test verifies that a user can change image sizing and alignment controls and see the image layout update in the preview.",
+    "category": "Image Management",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to add a new image"
+      },
+      {
+        "type": "action",
+        "description": "Add a valid image file"
+      },
+      {
+        "type": "action",
+        "description": "Adjust the image width"
+      },
+      {
+        "type": "action",
+        "description": "Change the image alignment"
+      },
+      {
+        "type": "action",
+        "description": "Change the image margin"
+      },
+      {
+        "type": "action",
+        "description": "Toggle the image display or float setting"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the image layout changes are reflected in the preview"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC038",
+    "title": "Jump to totals section from quick navigation",
+    "description": "This test verifies that selecting the totals shortcut moves the code editor to the totals section so the user can quickly edit invoice totals.",
+    "category": "Quick Jump Navigation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the totals shortcut"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the code editor shows the totals section"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the totals section is the active focus area"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC039",
+    "title": "Jump to items section from quick navigation",
+    "description": "This test verifies that selecting the items shortcut moves the code editor to the items section so the user can quickly edit product rows.",
+    "category": "Quick Jump Navigation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the items shortcut"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the code editor shows the items section"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the items section is the active focus area"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC040",
+    "title": "Jump to supplier section from quick navigation",
+    "description": "This test verifies that selecting the supplier shortcut moves the code editor to the supplier section so the user can quickly reach supplier markup.",
+    "category": "Quick Jump Navigation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the supplier shortcut"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the code editor shows the supplier section"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the supplier section is the active focus area"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC041",
+    "title": "Jump to customer section from quick navigation",
+    "description": "This test verifies that selecting the customer shortcut moves the code editor to the customer section so the user can quickly reach customer markup.",
+    "category": "Quick Jump Navigation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the customer shortcut"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the code editor shows the customer section"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the customer section is the active focus area"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC042",
+    "title": "Remove an image from the template",
+    "description": "This test verifies that a user can delete an image from the template and that it no longer appears in the design preview.",
+    "category": "Image Management",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to add a new image"
+      },
+      {
+        "type": "action",
+        "description": "Add a valid image file"
+      },
+      {
+        "type": "action",
+        "description": "Click the trash control for the image"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the image is removed from the design preview"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC043",
+    "title": "Preserve unsaved visual edits within the current session",
+    "description": "Verifies that preview-based styling changes remain visible during the current session before saving or refreshing.",
+    "category": "WYSIWYG Designer Mode",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click an element in the invoice preview"
+      },
+      {
+        "type": "action",
+        "description": "Change the element's padding or margin"
+      },
+      {
+        "type": "action",
+        "description": "Toggle text wrapping for the selected element"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated layout remains visible in the preview during the session"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC044",
+    "title": "Reload the template library list",
+    "description": "Verifies that refreshing the template library reloads the available templates.",
+    "category": "Template Library",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Open the template library dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to refresh the template list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the template list is displayed after refresh"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the available templates are visible"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC045",
+    "title": "Jump to invoice number section from quick navigation",
+    "description": "This test verifies that selecting the invoice number shortcut moves the code editor to the invoice number section so the user can quickly reach that invoice field.",
+    "category": "Quick Jump Navigation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the invoice number shortcut"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the code editor shows the invoice number section"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the invoice number section is the active focus area"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC046",
+    "title": "Reposition an image and save the placement",
+    "description": "This test verifies that a user can drag an image to a new position in the visual editor and persist that placement change.",
+    "category": "Image Drag and Drop",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Switch to the visual editor tab"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to add a new image"
+      },
+      {
+        "type": "action",
+        "description": "Add a valid image file"
+      },
+      {
+        "type": "action",
+        "description": "Drag the image to a new position in the preview"
+      },
+      {
+        "type": "action",
+        "description": "Save the pending changes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the image remains in the new position after saving"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC047",
+    "title": "See update availability in the status panel",
+    "description": "This test verifies that the status panel presents update availability information so the user can check whether an application update is available.",
+    "category": "Status Panel",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify update status information is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify any update availability message is visible"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC048",
+    "title": "Discard a dragged image placement change",
+    "description": "This test verifies that a user can reset a pending image drag operation and return the image to its prior position.",
+    "category": "Image Drag and Drop",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Switch to the visual editor tab"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to add a new image"
+      },
+      {
+        "type": "action",
+        "description": "Add a valid image file"
+      },
+      {
+        "type": "action",
+        "description": "Drag the image to a new position in the preview"
+      },
+      {
+        "type": "action",
+        "description": "Reset the pending changes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the image returns to its original position"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC049",
+    "title": "Check for updates manually",
+    "description": "Verifies that manually checking for updates shows the current update status to the user.",
+    "category": "Auto-Updater",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to check for updates"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an update status message is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the app remains usable after the check"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC050",
+    "title": "Switch the interface theme",
+    "description": "This verifies that choosing a theme control updates the application appearance immediately.",
+    "category": "Theme Switcher",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click one of the theme color controls"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the interface theme changes instantly"
+      }
+    ],
+    "priority": "Low"
+  }
+]

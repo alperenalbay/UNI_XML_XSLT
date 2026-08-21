@@ -1,0 +1,17 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:4173",
+  "executionArgs": {
+    "projectName": "XSLT desing",
+    "projectPath": "C:\\Users\\Devatek_06\\Desktop\\projects\\XSLT desing",
+    "testIds": [],
+    "additionalInstruction": "All tests were previously failing due to stale closures (TC005), inline editing not triggering (TC008), inspector not jumping (TC015), embedded XSLT not auto-loading (TC012), missing contextual toolbar for element actions (TC017/TC018/TC025), and watermark controls not visible (TC021/TC027). These have all been fixed. Re-run all tests to verify fixes.",
+    "serverMode": "production",
+    "envs": {
+      "API_KEY": "sk-user-g6gakuK8aF_s6xZpmrkW-FXHUUgBolKUUq95tylJLK-WYRKeusajnPpzdYi-V1P5UW3KK-sZ7gKFXaWEN5kESm5napIaYPsOpF5gENPOc6_001FUssNyf5_GVZUDzEOqPDs"
+    }
+  },
+  "serverPort": 58002
+}
