@@ -45,6 +45,7 @@ export interface EditorState {
   previewActiveTab: 'preview' | 'html' | 'logs';
   editorLayout: 'tabbed' | 'split';
   autoRefresh: boolean;
+  previewTrustedMode: boolean;
   isCopied: boolean;
   validationStatus: ValidationStatus;
   
@@ -105,6 +106,7 @@ export interface EditorActions {
   setPreviewActiveTab: (tab: 'preview' | 'html' | 'logs') => void;
   setEditorLayout: (layout: 'tabbed' | 'split') => void;
   setAutoRefresh: (auto: boolean) => void;
+  setPreviewTrustedMode: (trusted: boolean) => void;
   setIsCopied: (copied: boolean) => void;
   setValidationStatus: (status: ValidationStatus) => void;
   
@@ -167,6 +169,7 @@ const initialState: EditorState = {
   previewActiveTab: 'preview',
   editorLayout: 'tabbed',
   autoRefresh: true,
+  previewTrustedMode: false,
   isCopied: false,
   validationStatus: { xmlValid: true, xsltValid: true },
   
@@ -217,6 +220,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   setPreviewActiveTab: (tab: 'preview' | 'html' | 'logs') => set({ previewActiveTab: tab }),
   setEditorLayout: (layout: 'tabbed' | 'split') => set({ editorLayout: layout }),
   setAutoRefresh: (auto: boolean) => set({ autoRefresh: auto }),
+  setPreviewTrustedMode: (trusted: boolean) => set({ previewTrustedMode: trusted }),
   setIsCopied: (copied: boolean) => set({ isCopied: copied }),
   setValidationStatus: (status: ValidationStatus) => set({ validationStatus: status }),
   

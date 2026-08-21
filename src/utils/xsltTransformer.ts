@@ -1657,12 +1657,19 @@ export function setImageTransformInXslt(xsltCode: string, imgSrc: string, x: num
       return xsltCode;
     }
 
-    const imgEls = doc.querySelectorAll('img[src]');
     let target: Element | null = null;
-    for (const el of imgEls) {
-      if (el.getAttribute('src') === imgSrc) {
-        target = el;
-        break;
+
+    // QR targets are sent as "__qr__:<elementId>"
+    if (imgSrc.startsWith('__qr__:')) {
+      const qrId = imgSrc.slice('__qr__:'.length) || 'qrcode';
+      target = doc.querySelector(`#${qrId}`);
+    } else {
+      const imgEls = doc.querySelectorAll('img[src]');
+      for (const el of imgEls) {
+        if (el.getAttribute('src') === imgSrc) {
+          target = el;
+          break;
+        }
       }
     }
 
@@ -1791,5 +1798,4 @@ export function findLineByXsltId(xsltCode: string, targetId: string): number {
   }
   return 0;
 }
-
 

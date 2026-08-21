@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
 import { 
   FileCode, 
@@ -72,6 +72,7 @@ function App() {
     previewActiveTab, setPreviewActiveTab,
     editorLayout, setEditorLayout,
     autoRefresh, setAutoRefresh,
+    previewTrustedMode, setPreviewTrustedMode,
     isCopied,
     validationStatus, setValidationStatus,
     iframeLogs, setIframeLogs,
@@ -98,6 +99,13 @@ function App() {
   } = useEditorStore();
 
   const previewLayout = 'A4';
+  const allowPreviewScripts =
+    previewTrustedMode || editorActiveTab === 'imag-editor' || designerActive || inspectorActive;
+  const previewSandbox = previewTrustedMode
+    ? 'allow-same-origin allow-scripts allow-modals'
+    : allowPreviewScripts
+      ? 'allow-same-origin allow-scripts allow-modals'
+      : 'allow-same-origin allow-modals';
 
   // Selected Element Details (for WYSIWYG Styler)
   const [selectedSelector, setSelectedSelector] = useState<string>('')
@@ -132,7 +140,7 @@ function App() {
   const [imageTransforms, setImageTransforms] = useState<Record<number, { x: number; y: number }>>({})
   const [pendingTransforms, setPendingTransforms] = useState<Record<string, { x: number; y: number }>>({})
 
-  const loadCustomTemplates = async () => {
+  const loadCustomTemplates = useCallback(async () => {
     try {
       const res = await fetch('/api/list-templates')
       if (res.ok) {
@@ -158,23 +166,23 @@ function App() {
         description: 'Şablonlar yüklenirken hata oluştu'
       })
     }
-  }
+  }, [setCustomTemplates, addToast])
 
   // Load custom templates on mount
   useEffect(() => {
     loadCustomTemplates()
-  }, [])
+  }, [loadCustomTemplates])
 
   // Auto reload custom templates list when user visits Status Report tab
   useEffect(() => {
     if (previewActiveTab === 'logs') {
       loadCustomTemplates()
     }
-  }, [previewActiveTab])
+  }, [previewActiveTab, loadCustomTemplates])
 
   // Auto updater states (Zustand state references)
 
-  const checkUpdates = async () => {
+  const checkUpdates = useCallback(async () => {
     try {
       const res = await fetch('/api/check-update')
       if (res.ok) {
@@ -196,7 +204,7 @@ function App() {
         description: 'Güncellemeler kontrol edilemedi'
       })
     }
-  }
+  }, [setUpdateAvailable, addToast])
 
   const triggerUpdate = async () => {
     setIsUpdating(true)
@@ -243,7 +251,7 @@ function App() {
   // Load custom templates and check updates on mount
   useEffect(() => {
     checkUpdates()
-  }, [])
+  }, [checkUpdates])
 
   // Scan XSLT for images when content changes
   useEffect(() => {
@@ -402,7 +410,7 @@ function App() {
     return () => {
       observer.disconnect()
     }
-  }, [previewActiveTab, isAutoFit])
+  }, [previewActiveTab, isAutoFit, setZoomPercent])
 
   // Apply visual zoom internally inside the iframe document
   useEffect(() => {
@@ -455,7 +463,7 @@ function App() {
   }
 
   // Unified functions to update XML & XSLT states and force Monaco editors in sync (prevents tab-switching loss)
-  const updateXmlContent = (newVal: string) => {
+  const updateXmlContent = useCallback((newVal: string) => {
     setXmlContent(newVal)
     if (xmlEditorRef.current) {
       const currentVal = xmlEditorRef.current.getValue()
@@ -463,9 +471,9 @@ function App() {
         xmlEditorRef.current.setValue(newVal)
       }
     }
-  }
+  }, [setXmlContent])
 
-  const updateXsltContent = (newVal: string) => {
+  const updateXsltContent = useCallback((newVal: string) => {
     setXsltContent(newVal)
     if (xsltEditorRef.current) {
       const currentVal = xsltEditorRef.current.getValue()
@@ -473,7 +481,7 @@ function App() {
         xsltEditorRef.current.setValue(newVal)
       }
     }
-  }
+  }, [setXsltContent])
 
   // XML / XSLT Syntax / Well-formedness check
   useEffect(() => {
@@ -530,10 +538,10 @@ function App() {
     }
 
     setValidationStatus({ xmlValid, xsltValid, xmlError, xsltError, typeMismatchWarning })
-  }, [xmlContent, xsltContent])
+  }, [xmlContent, xsltContent, setValidationStatus])
 
   // Perform Transform
-  const runTransformation = () => {
+  const runTransformation = useCallback(() => {
     const currentXml = xmlContent || useEditorStore.getState().xmlContent
     const currentXslt = xsltContent || useEditorStore.getState().xsltContent
     if (!currentXml.trim() || !currentXslt.trim()) {
@@ -558,7 +566,7 @@ function App() {
         description: 'XML/XSLT başarıyla işlendi'
       })
     }
-  }
+  }, [xmlContent, xsltContent, setHtmlOutput, setErrorMsg, addToast])
 
   // Auto Refresh Trigger
   useEffect(() => {
@@ -568,12 +576,12 @@ function App() {
       }, 400) // Debounce transform to avoid freezing Monaco
       return () => clearTimeout(timer)
     }
-  }, [xmlContent, xsltContent, autoRefresh])
+  }, [xmlContent, xsltContent, autoRefresh, runTransformation])
 
   // Reset dismiss state when XML changes
   useEffect(() => {
     setHasDismissedXslt(false)
-  }, [xmlContent])
+  }, [xmlContent, setHasDismissedXslt])
 
   // Memoize iframe HTML output to prevent reload/desync on state changes (e.g. selection click)
   const srcDocValue = useMemo(() => {
@@ -602,6 +610,12 @@ function App() {
     if (!rawHtml && watermarkVisible && watermarkImage) {
       rawHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Filigran Önizleme</title></head><body></body></html>`;
     }
+    const injectIntoDocument = (html: string, block: string) => {
+      if (html.includes('</head>')) return html.replace('</head>', `${block}</head>`);
+      if (html.includes('</body>')) return html.replace('</body>', `${block}</body>`);
+      return html + block;
+    };
+
     if (rawHtml) {
       // Debug: log watermark state in preview composition
       // eslint-disable-next-line no-console
@@ -636,7 +650,7 @@ function App() {
         }
       `;
       const printStyleBlock = `<style id="uni-print-style">${printStyles}</style>`;
-      rawHtml = rawHtml.replace('</head>', `${printStyleBlock}</head>`);
+      rawHtml = injectIntoDocument(rawHtml, printStyleBlock);
       
       let styleRules = '';
       let scriptCode = '';
@@ -881,10 +895,10 @@ function App() {
       }
       if (styleRules) {
         const inspectorStyle = `<style id="uni-interactivity-style">${styleRules}</style>`;
-        rawHtml = rawHtml.replace('</head>', `${inspectorStyle}</head>`);
+        rawHtml = injectIntoDocument(rawHtml, inspectorStyle);
       }
-      if (scriptCode) {
-        rawHtml = rawHtml.replace('</head>', `${scriptCode}</head>`);
+      if (allowPreviewScripts && scriptCode) {
+        rawHtml = injectIntoDocument(rawHtml, scriptCode);
       }
     }
 
@@ -912,7 +926,7 @@ function App() {
     }
 
     // Image drag script for visual editor mode
-    if (editorActiveTab === 'imag-editor') {
+    if (editorActiveTab === 'imag-editor' && allowPreviewScripts) {
       const dragScript = `
 <script id="uni-image-drag">
 (function() {
@@ -928,28 +942,30 @@ function App() {
 
   document.addEventListener('mousedown', function(e) {
     var target = e.target;
-    if (target.tagName.toLowerCase() !== 'img') return;
+    var qrContainer = target && target.closest ? target.closest('#qrcode') : null;
+    var isQr = !!qrContainer;
+    if (!isQr && target.tagName.toLowerCase() !== 'img') return;
     if (target.closest('.uni-watermark-overlay, .uni-watermark-preview-overlay')) return;
     e.preventDefault();
     e.stopPropagation();
 
-    activeImg = target;
+    activeImg = isQr ? qrContainer : target;
     startX = e.clientX;
     startY = e.clientY;
-    var t = getTranslate(target);
+    var t = getTranslate(activeImg);
     origX = t[0];
     origY = t[1];
-    imgSrc = target.getAttribute('src') || '';
-    imgIndex = target.getAttribute('data-image-index');
-    imgIndex = imgIndex !== null ? parseInt(imgIndex, 10) : -1;
+    imgSrc = isQr ? ('__qr__:' + ((activeImg.getAttribute('id') || 'qrcode'))) : (activeImg.getAttribute('src') || '');
+    var rawIdx = isQr ? activeImg.getAttribute('data-qr-index') : activeImg.getAttribute('data-image-index');
+    imgIndex = rawIdx !== null ? parseInt(rawIdx, 10) : -1;
 
     console.log('[uni-image-drag] mousedown', { imgSrc: imgSrc ? imgSrc.substring(0,80)+'...' : '(empty)', imgIndex, origX, origY, startX, startY });
 
-    target.style.cursor = 'grabbing';
-    target.style.transition = 'none';
-    target.style.zIndex = '999';
-    target.style.boxShadow = '0 0 0 2px #10b981, 0 8px 24px rgba(0,0,0,0.3)';
-    target.style.borderRadius = '4px';
+    activeImg.style.cursor = 'grabbing';
+    activeImg.style.transition = 'none';
+    activeImg.style.zIndex = '999';
+    activeImg.style.boxShadow = '0 0 0 2px #10b981, 0 8px 24px rgba(0,0,0,0.3)';
+    activeImg.style.borderRadius = '4px';
   });
 
   document.addEventListener('mousemove', function(e) {
@@ -988,7 +1004,7 @@ function App() {
   });
 })();
 </script>`;
-      rawHtml = rawHtml.replace('</head>', dragScript + '</head>');
+      rawHtml = injectIntoDocument(rawHtml, dragScript);
     }
 
     // Live preview watermark overlay (in-memory only — not written to XSLT unless user clicks "XSLT'ye Kaydet")
@@ -1048,7 +1064,7 @@ function App() {
     }
 
     return rawHtml || '<p style="padding: 20px; color: #64748b; font-family: sans-serif; text-align: center;">Dönüştürülmüş fatura görüntüsü burada görüntülenecektir.</p>';
-  }, [htmlOutput, errorMsg, inspectorActive, designerActive, showTableBorders, watermarkVisible, watermarkImage, watermarkSize, watermarkOpacity, watermarkRotation, editorActiveTab])
+  }, [htmlOutput, errorMsg, inspectorActive, designerActive, showTableBorders, watermarkVisible, watermarkImage, watermarkSize, watermarkOpacity, watermarkRotation, editorActiveTab, allowPreviewScripts])
 
   // Attach event listeners and apply layout sizing inside the iframe document on load
   const handleIframeLoad = () => {
@@ -1388,7 +1404,7 @@ function App() {
     return 1
   }
 
-  const jumpToXsltLine = (line: number) => {
+  const jumpToXsltLine = useCallback((line: number) => {
     setEditorActiveTab('xslt')
     setTimeout(() => {
       if (xsltEditorRef.current) {
@@ -1397,7 +1413,7 @@ function App() {
         xsltEditorRef.current.focus()
       }
     }, 50)
-  }
+  }, [setEditorActiveTab])
 
   // Handle messages from the iframe (Text edits and selector clicks)
   useEffect(() => {
@@ -1449,6 +1465,9 @@ function App() {
       if (source === 'xslt-image-drag') {
         const { imgSrc: dragSrc, imageIndex, x: newX, y: newY } = event.data;
         let key = dragSrc;
+        if (typeof dragSrc === 'string' && dragSrc.startsWith('__qr__:')) {
+          key = dragSrc;
+        }
         if (imageIndex >= 0 && imageIndex < designerImages.length && designerImages[imageIndex].src) {
           key = designerImages[imageIndex].src;
         }
@@ -1621,7 +1640,7 @@ function App() {
 
     window.addEventListener('message', handleInspectorMessage)
     return () => window.removeEventListener('message', handleInspectorMessage)
-  }, [xsltContent, designerActive, inspectorActive])
+  }, [xsltContent, designerActive, inspectorActive, designerImages, selectedElementDetails?.xsltId, setIframeLogs, jumpToXsltLine, updateXsltContent, setInspectorStatus])
 
   // Show toast when HTML is copied
   useEffect(() => {
@@ -1632,7 +1651,7 @@ function App() {
         description: 'Dönüştürülen HTML çıktısı panoya kopyalandı.'
       })
     }
-  }, [isCopied])
+  }, [isCopied, addToast])
 
   // Helper to extract a clean hex color from style values (removing !important etc.)
   const cleanHexColor = (colorString: string): string => {
@@ -1930,7 +1949,7 @@ function App() {
       updateXsltContent(embeddedXslt)
       setHasDismissedXslt(true)
     }
-  }, [embeddedXslt])
+  }, [embeddedXslt, xsltEmptyOrDefault, hasDismissedXslt, xsltContent, updateXsltContent, setHasDismissedXslt])
 
   const handleApplyEmbeddedXslt = () => {
     if (embeddedXslt) {
@@ -3678,6 +3697,21 @@ function App() {
 
               {previewActiveTab === 'preview' && !errorMsg && (
                 <button
+                  onClick={() => setPreviewTrustedMode(!previewTrustedMode)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                    previewTrustedMode
+                      ? 'bg-amber-600/20 hover:bg-amber-600/30 border-amber-500/40 text-amber-300'
+                      : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
+                  }`}
+                  title="Trusted Mode açıkken önizlemede script çalıştırılabilir. Sadece güvendiğiniz şablonlarda açın."
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {previewTrustedMode ? 'Trusted: AÇIK' : 'Trusted: KAPALI'}
+                </button>
+              )}
+
+              {previewActiveTab === 'preview' && !errorMsg && (
+                <button
                   onClick={handlePrint}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium border border-slate-800 transition cursor-pointer"
                   title="Faturayı yazdırır veya PDF kaydeder."
@@ -3947,6 +3981,7 @@ function App() {
                     <iframe 
                       ref={iframeRef}
                       srcDoc={srcDocValue}
+                      sandbox={previewSandbox}
                       onLoad={handleIframeLoad}
                       className="w-full h-full border-none bg-slate-900"
                       title="Fatura Canlı Önizleme"

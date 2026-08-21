@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
   transformXmlWithXslt,
   extractEmbeddedXslt,
@@ -9,10 +9,17 @@ import {
   addWatermarkToXslt,
   removeWatermarkFromXslt,
   hasWatermarkInXslt,
+  setImageTransformInXslt,
 } from './xsltTransformer';
 
 describe('xsltTransformer', () => {
   describe('transformXmlWithXslt', () => {
+    const OriginalXSLTProcessor = (globalThis as any).XSLTProcessor;
+
+    afterEach(() => {
+      (globalThis as any).XSLTProcessor = OriginalXSLTProcessor;
+    });
+
     it('should handle empty XML', () => {
       const result = transformXmlWithXslt('', '<xsl:stylesheet />');
       expect(result.error).toBeDefined();
@@ -40,6 +47,67 @@ describe('xsltTransformer', () => {
       // XSLTProcessor sadece browser'da mevcut
       // Happy-dom/jsdom'da test edilmez
       expect(typeof (globalThis as any).XSLTProcessor).toBe('undefined');
+    });
+
+    it('should transform valid XML+XSLT when XSLTProcessor is available', () => {
+      class MockXSLTProcessor {
+        importStylesheet() {}
+        transformToDocument() {
+          const parser = new DOMParser();
+          return parser.parseFromString(
+            '<html><head></head><body><p>Rendered</p></body></html>',
+            'application/xml'
+          );
+        }
+      }
+
+      (globalThis as any).XSLTProcessor = MockXSLTProcessor;
+
+      const result = transformXmlWithXslt(
+        '<root><item>1</item></root>',
+        '<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"></xsl:stylesheet>'
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.html).toContain('<p>Rendered</p>');
+      expect(result.html).toContain('window.onerror');
+    });
+
+    it('should surface stylesheet import errors', () => {
+      class FailingImportXSLTProcessor {
+        importStylesheet() {
+          throw new Error('broken stylesheet');
+        }
+      }
+
+      (globalThis as any).XSLTProcessor = FailingImportXSLTProcessor;
+
+      const result = transformXmlWithXslt(
+        '<root><item>1</item></root>',
+        '<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"></xsl:stylesheet>'
+      );
+
+      expect(result.error).toContain('importStylesheet');
+      expect(result.html).toBe('');
+    });
+
+    it('should surface null transform outputs', () => {
+      class NullTransformXSLTProcessor {
+        importStylesheet() {}
+        transformToDocument() {
+          return null;
+        }
+      }
+
+      (globalThis as any).XSLTProcessor = NullTransformXSLTProcessor;
+
+      const result = transformXmlWithXslt(
+        '<root><item>1</item></root>',
+        '<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"></xsl:stylesheet>'
+      );
+
+      expect(result.error).toContain('null');
+      expect(result.html).toBe('');
     });
   });
 
@@ -392,5 +460,24 @@ describe('xsltTransformer', () => {
       expect(hasWatermarkInXslt(marked)).toBe(true);
     });
   });
-});
 
+  describe('setImageTransformInXslt', () => {
+    it('should persist transform for qrcode container', () => {
+      const xslt = `<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <html>
+      <body>
+        <div id="qrcode" style="float:right; margin: 5px;" />
+      </body>
+    </html>
+  </xsl:template>
+</xsl:stylesheet>`;
+
+      const result = setImageTransformInXslt(xslt, '__qr__:qrcode', 12, -6);
+      expect(result).toContain('id="qrcode"');
+      expect(result).toContain('transform: translate(12px, -6px)');
+      expect(result).toContain('position: relative');
+    });
+  });
+});
