@@ -217,15 +217,26 @@ function App() {
     try {
       const res = await fetch('/api/trigger-update', { method: 'POST' })
       if (res.ok) {
-        setUpdateCheckStatus('Güncelleme başarıyla tamamlandı! Sayfa 3 saniye içinde yenilenecek.')
-        addToast({
-          type: 'success',
-          message: 'Güncelleme Tamamlandı',
-          description: 'Sayfa yeniden yüklenecek...'
-        })
-        setTimeout(() => {
-          window.location.reload()
-        }, 3000)
+        const data = await res.json()
+        if (data.changed === false) {
+          setUpdateAvailable(false)
+          setUpdateCheckStatus('Uygulama zaten en güncel sürümde çalışıyor, güncelleme gerekmedi.')
+          addToast({
+            type: 'info',
+            message: 'Zaten Güncel',
+            description: 'Uygulama en güncel sürümde, güncelleme gerekmedi.'
+          })
+        } else {
+          setUpdateCheckStatus('Güncelleme başarıyla tamamlandı! Sayfa 3 saniye içinde yenilenecek.')
+          addToast({
+            type: 'success',
+            message: 'Güncelleme Tamamlandı',
+            description: 'Sayfa yeniden yüklenecek...'
+          })
+          setTimeout(() => {
+            window.location.reload()
+          }, 3000)
+        }
       } else {
         const data = await res.json()
         addToast({
