@@ -55,18 +55,21 @@ if not exist .git (
     goto :CHECK_MODULES
 )
 
-:: Git is available and it is a repo
-git fetch origin main >nul 2>&1
+:: Git is available and it is a repo - all remote branches are fetched
+git fetch origin >nul 2>&1
 if %errorlevel% neq 0 (
     echo [UYARI] GitHub ile baglanti kurulamadi, guncelleme denetimi atlandi.
     goto :CHECK_MODULES
 )
 
-:: Get hashes
+:: Get hashes - use the tracked (upstream) remote branch of the current branch
 set LOCAL_HASH=
 for /f "tokens=*" %%a in ('git rev-parse HEAD') do set LOCAL_HASH=%%a
 set REMOTE_HASH=
-for /f "tokens=*" %%b in ('git rev-parse origin/main') do set REMOTE_HASH=%%b
+for /f "tokens=*" %%b in ('git rev-parse @{u}') do set REMOTE_HASH=%%b
+if "%REMOTE_HASH%"=="" (
+    set REMOTE_HASH=%LOCAL_HASH%
+)
 
 if "%LOCAL_HASH%"=="" (
     echo [UYARI] Yerel surum bilgisi alinamadi.

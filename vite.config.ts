@@ -22,18 +22,38 @@ const templateServerPlugin = () => ({
             res.end(JSON.stringify({ updateAvailable: false, reason: 'not_git_repo' }));
             return;
           }
-          
-          execSync('git fetch origin main', { stdio: 'ignore' });
+
+          // Uzak depodaki tüm branch'leri getir ve aktif dalın izlenen
+          // (upstream) remote dalı ile karşılaştır. Böylece hangi branch'te
+          // olunursa olunsun doğru sürüm karşılaştırması yapılır.
+          execSync('git fetch origin', { stdio: 'ignore' });
           const localHash = execSync('git rev-parse HEAD').toString().trim();
-          const remoteHash = execSync('git rev-parse origin/main').toString().trim();
-          
+          const branch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
+
+          let remoteHash: string;
+          try {
+            remoteHash = execSync(`git rev-parse @{u}`).toString().trim();
+          } catch (upstreamErr: any) {
+            // İzlenen uzak dal yoksa (ör. yeni dal), remote'u dal adıyla varsay.
+            remoteHash = execSync(
+              `git rev-parse origin/${branch} 2>nul || git rev-parse origin/main`
+            )
+              .toString()
+              .trim()
+              .split(/\r?\n/)
+              .pop() || localHash;
+          }
+
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({
-            updateAvailable: localHash !== remoteHash,
-            localHash,
-            remoteHash
-          }));
+          res.end(
+            JSON.stringify({
+              updateAvailable: localHash !== remoteHash,
+              localHash,
+              remoteHash,
+              branch
+            })
+          );
         } catch (err: any) {
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');
@@ -41,18 +61,25 @@ const templateServerPlugin = () => ({
         }
         return;
       }
-      
+
       if (req.url === '/api/trigger-update' && req.method === 'POST') {
         try {
+          // Yalnızca doğru branch'i değil, remote'u da güncel tut.
+          execSync('git fetch origin', { stdio: 'ignore' });
+          const beforeHash = execSync('git rev-parse HEAD').toString().trim();
           execSync('git pull', { stdio: 'inherit' });
+          const afterHash = execSync('git rev-parse HEAD').toString().trim();
+          const changed = beforeHash !== afterHash;
           try {
-            execSync('npm install', { stdio: 'inherit' });
+            if (changed) {
+              execSync('npm install', { stdio: 'inherit' });
+            }
           } catch (npmErr) {
             console.warn('npm install failed but git pull succeeded', npmErr);
           }
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ success: true }));
+          res.end(JSON.stringify({ success: true, changed, beforeHash, afterHash }));
         } catch (err: any) {
           res.statusCode = 500;
           res.setHeader('Content-Type', 'application/json');

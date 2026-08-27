@@ -34,6 +34,12 @@ export function useUpdates() {
     try {
       const res = await fetch('/api/trigger-update', { method: 'POST' });
       if (res.ok) {
+        const data = await res.json();
+        if (data.changed === false) {
+          setUpdateAvailable(false);
+          setUpdateCheckStatus('Uygulama zaten en güncel sürümde çalışıyor, güncelleme gerekmedi.');
+          return true;
+        }
         setUpdateCheckStatus(
           'Güncelleme başarıyla tamamlandı! Sayfa 3 saniye içinde yenilenecek.'
         );
