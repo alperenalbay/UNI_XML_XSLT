@@ -465,33 +465,56 @@ function App() {
     return () => clearTimeout(timer)
   }, [zoomPercent, htmlOutput, previewActiveTab, appTheme])
 
-  const handleXmlEditorMount = (editor: any) => {
+  // Monaco karakter genişliğini ilk mount anında (webfont henüz gelmeden) ölçerse
+  // satır sonunda büyüyen kümülatif imleç kayması olur. `editor.layout()` bunu
+  // düzeltmez; resmi yöntem `monaco.editor.remeasureFonts()` + `editor.layout()`.
+  const stabilizeMonacoEditor = (editor: any, monaco: any) => {
+    const remeasure = () => {
+      try { monaco?.editor?.remeasureFonts?.() } catch { /* noop */ }
+      try { editor.layout() } catch { /* noop */ }
+    }
+    requestAnimationFrame(remeasure)
+    try {
+      const fonts = (document as any)?.fonts
+      const loads: Promise<any>[] = []
+      if (fonts?.load) {
+        // Editörlerde kullanılan tüm boyut/ağırlıklar için fontu bilerek yüklet
+        for (const size of [12, 13, 14]) {
+          for (const weight of [400, 500]) {
+            try { loads.push(fonts.load(`${weight} ${size}px "JetBrains Mono"`)) } catch { /* noop */ }
+          }
+        }
+      }
+      if (loads.length > 0) {
+        Promise.all(loads).then(remeasure).catch(() => {})
+      }
+      fonts?.ready?.then(remeasure).catch(() => {})
+    } catch { /* noop */ }
+  }
+
+  const handleXmlEditorMount = (editor: any, monaco: any) => {
     xmlEditorRef.current = editor
+    stabilizeMonacoEditor(editor, monaco)
   }
 
-  const handleXsltEditorMount = (editor: any) => {
+  const handleXsltEditorMount = (editor: any, monaco: any) => {
     xsltEditorRef.current = editor
+    stabilizeMonacoEditor(editor, monaco)
   }
 
-  // Unified functions to update XML & XSLT states and force Monaco editors in sync (prevents tab-switching loss)
+  const handleHtmlEditorMount = (editor: any, monaco: any) => {
+    stabilizeMonacoEditor(editor, monaco)
+  }
+
+  // NOT: `value` prop'u zaten kontrollü senkron yapıyor. Burada manuel
+  // `editor.setValue()` çağırmak imleç/seçim durumunu sıfırlar ve
+  // "farklı yere yazma / imleç zıplaması" yapar. Bu yüzden sadece state güncellenir.
   const updateXmlContent = useCallback((newVal: string) => {
     setXmlContent(newVal)
-    if (xmlEditorRef.current) {
-      const currentVal = xmlEditorRef.current.getValue()
-      if (currentVal !== newVal) {
-        xmlEditorRef.current.setValue(newVal)
-      }
-    }
   }, [setXmlContent])
 
   const updateXsltContent = useCallback((newVal: string) => {
     setXsltContent(newVal)
-    if (xsltEditorRef.current) {
-      const currentVal = xsltEditorRef.current.getValue()
-      if (currentVal !== newVal) {
-        xsltEditorRef.current.setValue(newVal)
-      }
-    }
   }, [setXsltContent])
 
   // XML / XSLT Syntax / Well-formedness check
@@ -2619,7 +2642,7 @@ function App() {
           </div>
 
           {/* Editors Container */}
-          <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             {editorActiveTab === 'designer' ? (
               // FIGMA DESIGN PROPERTIES DASHBOARD
               <div className="flex-1 flex flex-col min-h-0 bg-slate-950 p-6 overflow-y-auto scrollbar-thin text-slate-300 select-none">
@@ -3444,7 +3467,7 @@ function App() {
                 )}
 
                 {/* Monaco Instances */}
-                <div className="flex-1 min-h-0 bg-slate-950 relative">
+                <div className="flex-1 min-h-0 bg-slate-950 relative overflow-hidden">
                   <div className={`w-full h-full ${editorActiveTab === 'xml' ? 'block' : 'hidden'}`}>
                     <Editor
                       height="100%"
@@ -3456,9 +3479,21 @@ function App() {
                       options={{
                         minimap: { enabled: false },
                         fontSize: 14,
-                        fontFamily: "'JetBrains Mono', Consolas, monospace",
+                        fontFamily: "'JetBrains Mono', Consolas, 'Courier New', monospace",
+                        fontLigatures: false,
+                        fontWeight: '400',
+                        letterSpacing: 0,
+                        lineHeight: 21,
                         wordWrap: 'on',
                         automaticLayout: true,
+                        fixedOverflowWidgets: true,
+                        scrollBeyondLastLine: false,
+                        smoothScrolling: false,
+                        cursorSmoothCaretAnimation: 'off',
+                        cursorBlinking: 'blink',
+                        roundedSelection: false,
+                        padding: { top: 8 },
+                        renderLineHighlight: 'all',
                         scrollbar: { vertical: 'visible', horizontal: 'visible' },
                       }}
                     />
@@ -3474,9 +3509,21 @@ function App() {
                       options={{
                         minimap: { enabled: false },
                         fontSize: 14,
-                        fontFamily: "'JetBrains Mono', Consolas, monospace",
+                        fontFamily: "'JetBrains Mono', Consolas, 'Courier New', monospace",
+                        fontLigatures: false,
+                        fontWeight: '400',
+                        letterSpacing: 0,
+                        lineHeight: 21,
                         wordWrap: 'on',
                         automaticLayout: true,
+                        fixedOverflowWidgets: true,
+                        scrollBeyondLastLine: false,
+                        smoothScrolling: false,
+                        cursorSmoothCaretAnimation: 'off',
+                        cursorBlinking: 'blink',
+                        roundedSelection: false,
+                        padding: { top: 8 },
+                        renderLineHighlight: 'all',
                         scrollbar: { vertical: 'visible', horizontal: 'visible' },
                       }}
                     />
@@ -3534,7 +3581,7 @@ function App() {
                   )}
 
                   {/* Editor */}
-                  <div className="flex-1 min-h-0 bg-slate-950">
+                  <div className="flex-1 min-h-0 bg-slate-950 overflow-hidden relative">
                     <Editor
                       height="100%"
                       language="xml"
@@ -3545,9 +3592,21 @@ function App() {
                       options={{
                         minimap: { enabled: false },
                         fontSize: 13,
-                        fontFamily: "'JetBrains Mono', Consolas, monospace",
+                        fontFamily: "'JetBrains Mono', Consolas, 'Courier New', monospace",
+                        fontLigatures: false,
+                        fontWeight: '400',
+                        letterSpacing: 0,
+                        lineHeight: 20,
                         wordWrap: 'on',
                         automaticLayout: true,
+                        fixedOverflowWidgets: true,
+                        scrollBeyondLastLine: false,
+                        smoothScrolling: false,
+                        cursorSmoothCaretAnimation: 'off',
+                        cursorBlinking: 'blink',
+                        roundedSelection: false,
+                        padding: { top: 8 },
+                        renderLineHighlight: 'all',
                       }}
                     />
                   </div>
@@ -3612,7 +3671,7 @@ function App() {
                   )}
 
                   {/* Editor */}
-                  <div className="flex-1 min-h-0 bg-slate-950">
+                  <div className="flex-1 min-h-0 bg-slate-950 overflow-hidden relative">
                     <Editor
                       height="100%"
                       language="xml"
@@ -3623,9 +3682,21 @@ function App() {
                       options={{
                         minimap: { enabled: false },
                         fontSize: 13,
-                        fontFamily: "'JetBrains Mono', Consolas, monospace",
+                        fontFamily: "'JetBrains Mono', Consolas, 'Courier New', monospace",
+                        fontLigatures: false,
+                        fontWeight: '400',
+                        letterSpacing: 0,
+                        lineHeight: 20,
                         wordWrap: 'on',
                         automaticLayout: true,
+                        fixedOverflowWidgets: true,
+                        scrollBeyondLastLine: false,
+                        smoothScrolling: false,
+                        cursorSmoothCaretAnimation: 'off',
+                        cursorBlinking: 'blink',
+                        roundedSelection: false,
+                        padding: { top: 8 },
+                        renderLineHighlight: 'all',
                       }}
                     />
                   </div>
@@ -4007,13 +4078,20 @@ function App() {
                       language="html"
                       theme={appTheme === 'stripe' || appTheme === 'notion' ? 'light' : 'vs-dark'}
                       value={htmlOutput}
+                      onMount={handleHtmlEditorMount}
                       options={{
                         readOnly: true,
                         minimap: { enabled: false },
                         fontSize: 12,
-                        fontFamily: "'JetBrains Mono', Consolas, monospace",
+                        fontFamily: "'JetBrains Mono', Consolas, 'Courier New', monospace",
+                        fontLigatures: false,
+                        fontWeight: '400',
+                        letterSpacing: 0,
+                        lineHeight: 18,
                         wordWrap: 'on',
                         automaticLayout: true,
+                        fixedOverflowWidgets: true,
+                        scrollBeyondLastLine: false,
                       }}
                     />
                   </div>

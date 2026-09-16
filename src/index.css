@@ -354,6 +354,20 @@
   }
 }
 
+/* Monaco imleç/ölçüm koruması: dışarıdan gelen letter-spacing/transform
+   tıklanan yer ile imlecin farklı çıkmasına yol açar. */
+.monaco-editor,
+.monaco-editor .view-lines,
+.monaco-editor .view-line,
+.monaco-editor textarea.inputarea {
+  letter-spacing: 0 !important;
+  font-variant-ligatures: none !important;
+  font-feature-settings: normal !important;
+}
+.monaco-editor .view-lines {
+  transform: none !important;
+}
+
 /* -------------------------------------------------------------
    SKELETON BASE LAYOUT & FONTS
    ------------------------------------------------------------- */
