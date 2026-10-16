@@ -10,6 +10,11 @@ import {
   removeWatermarkFromXslt,
   hasWatermarkInXslt,
   setImageTransformInXslt,
+  updateImageStyleInXslt,
+  getImageStyleFromXslt,
+  extractAllImagesFromXslt,
+  replaceImageInXslt,
+  addImageToXslt,
 } from './xsltTransformer';
 
 describe('xsltTransformer', () => {
@@ -478,6 +483,170 @@ describe('xsltTransformer', () => {
       expect(result).toContain('id="qrcode"');
       expect(result).toContain('transform: translate(12px, -6px)');
       expect(result).toContain('position: relative');
+    });
+  });
+
+  describe('updateImageStyleInXslt — wrapper div güvenliği', () => {
+    it('should not corrupt XSLT when img is inside a table cell (wrapper div not directly wrapping)', () => {
+      // Regresyon: wrapper div ararken uzak bir ata div bulunup
+      // aradaki tüm içeriğin silindiği hata.
+      const xslt = `<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <html><body>
+      <table>
+        <tr><td>
+          <div class="barcode-wrapper">
+            <script>Barcode=function(){CDATA-stuff}</script>
+            <img src="data:image/jpeg;base64,XXX" alt="Logo"/>
+            <p>Sonra</p>
+          </div>
+        </td></tr>
+      </table>
+    </body></html>
+  </xsl:template>
+</xsl:stylesheet>`;
+
+      // text-align wrapper prop'u: eğer div araması yapılırsa XSLT bozulmamalı
+      const result = updateImageStyleInXslt(xslt, 'data:image/jpeg;base64,XXX', 'text-align', 'center');
+      // Bozulmamış: script hâlâ var, XSLT geçerli kalır
+      expect(result).toContain('Barcode=function');
+      expect(result).toContain('<img');
+      expect(result).toContain('<p>Sonra</p>');
+    });
+
+    it('should update wrapper when div directly wraps image', () => {
+      const xslt = `<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <html><body>
+      <div><img src="data:image/jpeg;base64,XXX" alt="Logo"/></div>
+    </body></html>
+  </xsl:template>
+</xsl:stylesheet>`;
+      const result = updateImageStyleInXslt(xslt, 'data:image/jpeg;base64,XXX', 'text-align', 'center');
+      expect(result).toContain('text-align: center');
+      // nitelik etiketin İÇİNDE olmalı — `<div> style="..."` bozuk çıktısına izin yok
+      expect(result).toMatch(/<div[^>]*style="[^"]*"\s*>/);
+      expect(result).toMatch(/<div[^>]*>\s*<img/);
+    });
+  });
+
+  describe('findDirectWrapperDiv üzerinden okuma güvenliği ( getImageStyleFromXslt )', () => {
+    // ≥200 karakterlik src → indeks tabanlı uzun yol tetiklenir.
+    const longSrc = 'data:image/png;base64,' + 'A'.repeat(240);
+
+    it('doğrudan saran divin stili okunur (uzun src)', () => {
+      const xslt = `<html><body><div style="text-align: center"><img src="${longSrc}" alt="Logo"/></div></body></html>`;
+      expect(getImageStyleFromXslt(xslt, longSrc, 'text-align')).toBe('center');
+      // div'de olmayan özellik boş döner
+      expect(getImageStyleFromXslt(xslt, longSrc, 'margin')).toBe('');
+    });
+
+    it('uzak ata divin stili OKUNMAZ (uzun src) — önceki kod buradan yanlış değer okuyordu', () => {
+      // img bir tablo hücresinde; style ise uzaktaki ata divde.
+      const xslt = `<html><body><div style="text-align: center"><table><tr><td><img src="${longSrc}" alt="Logo"/></td></tr></table></div></body></html>`;
+      expect(getImageStyleFromXslt(xslt, longSrc, 'text-align')).toBe('');
+    });
+
+    it('uzak ata divin stili OKUNMAZ (kısa src)', () => {
+      const xslt = `<html><body><div style="text-align: center"><p>metin</p><img src="logo.png" alt="L"/></div></body></html>`;
+      expect(getImageStyleFromXslt(xslt, 'logo.png', 'text-align')).toBe('');
+    });
+
+    it('doğrudan saran divin stili okunur (kısa src)', () => {
+      const xslt = `<html><body><div style="text-align: center"><img src="logo.png" alt="L"/></div></body></html>`;
+      expect(getImageStyleFromXslt(xslt, 'logo.png', 'text-align')).toBe('center');
+    });
+
+    it('img etiketinin kendi stili önce okunur', () => {
+      const xslt = `<html><body><div style="text-align: center"><img src="logo.png" style="float: right"/></div></body></html>`;
+      expect(getImageStyleFromXslt(xslt, 'logo.png', 'float')).toBe('right');
+    });
+
+    it('width img etiketinden okunur', () => {
+      const xslt = `<html><body><img src="logo.png" style="width: 120px"/></body></html>`;
+      expect(getImageStyleFromXslt(xslt, 'logo.png', 'width')).toBe('120px');
+    });
+  });
+
+  describe('updateImageStyleInXslt — uzun src güvenliği', () => {
+    const longSrc = 'data:image/png;base64,' + 'B'.repeat(240);
+
+    it('doğrudan saran div güncellenir, img etiketi korunur', () => {
+      const xslt = `<html><body><div><img src="${longSrc}" alt="Logo"/></div></body></html>`;
+      const result = updateImageStyleInXslt(xslt, longSrc, 'text-align', 'center');
+      expect(result).toContain('text-align: center');
+      expect(result).toContain(`src="${longSrc}"`);
+      // div-görsel komşuluğu bozulmadı
+      expect(result).toMatch(/<div[^>]*>\s*<img/);
+    });
+
+    it('uzak ata div güncellenmez, belge değişmeden döner', () => {
+      const xslt = `<html><body><div style="text-align: left"><table><tr><td><img src="${longSrc}" alt="Logo"/></td></tr></table></div></body></html>`;
+      const result = updateImageStyleInXslt(xslt, longSrc, 'text-align', 'center');
+      expect(result).toBe(xslt);
+    });
+  });
+
+  describe('extractAllImagesFromXslt — wrapper alanları', () => {
+    it('wrapperClass yalnızca doğrudan sarma durumunda dolar, previewSrc kısaltılır', () => {
+      const longSrc = 'data:image/png;base64,' + 'C'.repeat(240);
+      const xslt = `<html><body>
+  <div class="logo-wrap"><img src="${longSrc}" alt="Logo"/></div>
+  <div class="distant-wrap" style="text-align: left"><p>metin</p><img src="kucuk.png" alt="K"/></div>
+</body></html>`;
+
+      const imgs = extractAllImagesFromXslt(xslt);
+      expect(imgs).toHaveLength(2);
+
+      const base64 = imgs.find((i) => i.isBase64)!;
+      expect(base64.wrapperClass).toBe('logo-wrap');
+      expect(base64.previewSrc).toBe(longSrc.slice(0, 100) + '...' + longSrc.slice(-20));
+      expect(base64.currentAlign).toBe('center');
+
+      const kucuk = imgs.find((i) => i.src === 'kucuk.png')!;
+      // uzaktaki divin sınıfı ve stili bu görsele çalınmaz
+      expect(kucuk.wrapperClass).toBe('');
+      expect(kucuk.currentAlign).toBe('center');
+      expect(kucuk.currentAlign).not.toBe('left');
+    });
+  });
+
+  describe('replaceImageInXslt', () => {
+    it('eski src her geçtiği yerde değiştirilir', () => {
+      const xslt = `<img src="a.png"/><div data-ref="a.png"></div>`;
+      expect(replaceImageInXslt(xslt, 'a.png', 'b.png')).toBe(
+        `<img src="b.png"/><div data-ref="b.png"></div>`
+      );
+    });
+
+    it('boş girdilerde belgeye dokunmaz', () => {
+      expect(replaceImageInXslt('', 'a.png', 'b.png')).toBe('');
+      expect(replaceImageInXslt('<img src="a.png"/>', '', 'b.png')).toBe('<img src="a.png"/>');
+      expect(replaceImageInXslt('<img src="a.png"/>', 'a.png', '')).toBe('<img src="a.png"/>');
+    });
+  });
+
+  describe('addImageToXslt', () => {
+    it('görseli body içine ortalanmış div olarak ekler', () => {
+      const xslt = `<html><body><h1>Rapor</h1></body></html>`;
+      const result = addImageToXslt(xslt, 'logo.png', 'Logo');
+      expect(result).toContain('<div style="text-align: center');
+      expect(result).toContain('src="logo.png"');
+      expect(result).toContain('alt="Logo"');
+      expect(result.indexOf('text-align: center')).toBeGreaterThan(result.indexOf('<body'));
+      // mevcut içerik korunur
+      expect(result).toContain('<h1>Rapor</h1>');
+    });
+
+    it('body yoksa html içine ekler ve alt boş geçilebilir', () => {
+      const xslt = `<html><head></head></html>`;
+      const result = addImageToXslt(xslt, 'logo.png', '');
+      expect(result).toContain('src="logo.png"');
+      expect(result).toContain('alt=""');
+    });
+
+    it('boş belgeye eklememezlik eder', () => {
+      expect(addImageToXslt('', 'logo.png', 'L')).toBe('');
     });
   });
 });

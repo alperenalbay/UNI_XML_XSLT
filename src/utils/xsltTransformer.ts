@@ -52,10 +52,10 @@ export function transformXmlWithXslt(xmlString: string, xsltString: string): Tra
     const xsltProcessor = new XSLTProcessor();
     try {
       xsltProcessor.importStylesheet(xsltDoc);
-    } catch (e: any) {
+    } catch (e: unknown) {
       return {
         html: '',
-        error: `XSLT Şablon Yükleme Hatası (importStylesheet):\n${e?.message || e}`
+        error: `XSLT Şablon Yükleme Hatası (importStylesheet):\n${e instanceof Error ? e.message : String(e)}`
       };
     }
 
@@ -141,16 +141,16 @@ export function transformXmlWithXslt(xmlString: string, xsltString: string): Tra
       htmlString = htmlString.replace(/<head\b[^>]*>/i, (match) => match + errorHandlerScript);
       
       return { html: htmlString };
-    } catch (transformErr: any) {
+    } catch (transformErr: unknown) {
       return {
         html: '',
-        error: `XSLT Dönüşüm Çalışma Zamanı Hatası:\n${transformErr?.message || transformErr}`
+        error: `XSLT Dönüşüm Çalışma Zamanı Hatası:\n${transformErr instanceof Error ? transformErr.message : String(transformErr)}`
       };
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
       html: '',
-      error: `Beklenmeyen Hata:\n${err?.message || err}`
+      error: `Beklenmeyen Hata:\n${err instanceof Error ? err.message : String(err)}`
     };
   }
 }
@@ -514,101 +514,9 @@ export function updateXsltText(xsltCode: string, oldText: string, newText: strin
 /**
  * XSLT DOM ağacındaki iki elemanın yerini değiştirir (swap).
  */
-export function swapXsltElements(xsltCode: string, selectorA: string, selectorB: string): string {
-  if (!xsltCode.trim() || !selectorA || !selectorB) return xsltCode;
-
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xsltCode, 'application/xml');
-    
-    // Check if parse error occurred
-    if (doc.querySelector('parsererror')) {
-      console.warn('XSLT parser error when swapping');
-      return xsltCode;
-    }
-
-    const classA = selectorA.startsWith('.') ? selectorA.substring(1) : selectorA;
-    const classB = selectorB.startsWith('.') ? selectorB.substring(1) : selectorB;
-
-    const findElementByClass = (root: Node, clsName: string): Element | null => {
-      if (root.nodeType === Node.ELEMENT_NODE) {
-        const el = root as Element;
-        const cls = el.getAttribute('class') || '';
-        if (cls.split(/\s+/).includes(clsName)) {
-          return el;
-        }
-      }
-      for (let i = 0; i < root.childNodes.length; i++) {
-        const found = findElementByClass(root.childNodes[i], clsName);
-        if (found) return found;
-      }
-      return null;
-    };
-
-    const elA = findElementByClass(doc.documentElement, classA);
-    const elB = findElementByClass(doc.documentElement, classB);
-
-    if (elA && elB && elA.parentNode === elB.parentNode && elA.parentNode !== null) {
-      const parent = elA.parentNode;
-      
-      // We will perform a swap in the child nodes list
-      const cloneA = elA.cloneNode(true);
-      const cloneB = elB.cloneNode(true);
-      
-      parent.replaceChild(cloneA, elB);
-      parent.replaceChild(cloneB, elA);
-
-      const serializer = new XMLSerializer();
-      return serializer.serializeToString(doc);
-    }
-  } catch (err) {
-    console.error('Failed to swap XSLT elements', err);
-  }
-  return xsltCode;
-}
-
 /**
  * XSLT DOM ağacındaki watermark-stamp elemanının metnini güvenle günceller.
  */
-export function updateWatermarkTextInXslt(xsltCode: string, newText: string): string {
-  if (!xsltCode.trim()) return xsltCode;
-
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xsltCode, 'application/xml');
-    
-    if (doc.querySelector('parsererror')) {
-      console.warn('XSLT parser error when updating watermark text');
-      return xsltCode;
-    }
-
-    const findElementByClass = (root: Node, clsName: string): Element | null => {
-      if (root.nodeType === Node.ELEMENT_NODE) {
-        const el = root as Element;
-        const cls = el.getAttribute('class') || '';
-        if (cls.split(/\s+/).includes(clsName)) {
-          return el;
-        }
-      }
-      for (let i = 0; i < root.childNodes.length; i++) {
-        const found = findElementByClass(root.childNodes[i], clsName);
-        if (found) return found;
-      }
-      return null;
-    };
-
-    const el = findElementByClass(doc.documentElement, 'watermark-stamp');
-    if (el) {
-      el.textContent = newText;
-      const serializer = new XMLSerializer();
-      return serializer.serializeToString(doc);
-    }
-  } catch (err) {
-    console.error('Failed to update watermark text in XSLT', err);
-  }
-  return xsltCode;
-}
-
 /**
  * Bir XSLT görselinin base64 verisinden üretilecekWatermarkJSON'dur.
  * Görsel gövdede tam ortalanmış, silüet (siyah + düşük opaklık) olarak konumlanır.
@@ -747,13 +655,29 @@ export function hasWatermarkInXslt(xsltCode: string): boolean {
 }
 
 /**
+ * Önizlemede seçilen elemanın XSLT içindeki karşılığını bulmak için
+ * taşınan kimlik/belirteç bilgileri (WYSIWYG seçim detayları).
+ */
+export interface ElementDetails {
+  xsltId?: string;
+  tableXsltId?: string;
+  cellXsltId?: string;
+  colXsltId?: string;
+  targetTagName?: string;
+  targetSrc?: string;
+  targetHref?: string;
+  imageIndex?: number;
+  isQrCode?: boolean;
+}
+
+/**
  * XSLT içerisine yeni bir metin alanı ekler ve onun için CSS kuralı tanımlar.
  */
 export function addElementToXslt(
   xsltCode: string, 
   parentSelector: string, 
   text: string,
-  details?: { xsltId?: string }
+  details?: ElementDetails
 ): string {
   if (!xsltCode.trim()) return xsltCode;
 
@@ -870,7 +794,7 @@ export function addElementToXslt(
 /**
  * XSLT içerisindeki bir elemanı sınıfına, ID'sine veya tag adına göre kaldırır ve stil kuralını temizler.
  */
-export function removeElementFromXslt(xsltCode: string, selector: string, details?: any): string {
+export function removeElementFromXslt(xsltCode: string, selector: string, details?: ElementDetails): string {
   if (!xsltCode.trim() || !selector) return xsltCode;
 
   try {
@@ -1061,48 +985,6 @@ export function removeElementFromXslt(xsltCode: string, selector: string, detail
 /**
  * XSLT DOM ağacındaki belirli bir sınıf adına sahip elemanın metnini günceller.
  */
-export function updateElementTextInXsltByClass(xsltCode: string, className: string, newText: string): string {
-  if (!xsltCode.trim() || !className) return xsltCode;
-
-  try {
-    const firstClass = className.split(/\s+/).filter(c => c.trim().length > 0 && c !== 'uni-selected-element')[0];
-    if (!firstClass) return xsltCode;
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xsltCode, 'application/xml');
-    
-    if (doc.querySelector('parsererror')) {
-      console.warn('XSLT parser error when updating text by class');
-      return xsltCode;
-    }
-
-    const findElementByClass = (root: Node, clsName: string): Element | null => {
-      if (root.nodeType === Node.ELEMENT_NODE) {
-        const el = root as Element;
-        const cls = el.getAttribute('class') || '';
-        if (cls.split(/\s+/).includes(clsName)) {
-          return el;
-        }
-      }
-      for (let i = 0; i < root.childNodes.length; i++) {
-        const found = findElementByClass(root.childNodes[i], clsName);
-        if (found) return found;
-      }
-      return null;
-    };
-
-    const el = findElementByClass(doc.documentElement, firstClass);
-    if (el) {
-      el.textContent = newText;
-      const serializer = new XMLSerializer();
-      return serializer.serializeToString(doc);
-    }
-  } catch (err) {
-    console.error('Failed to update element text in XSLT by class', err);
-  }
-  return xsltCode;
-}
-
 /**
  * Monaco editöründe hedeflenen satırdaki XML etiketinin width ve style özelliklerini
  * doğrudan metin (string) düzeyinde günceller. Bu sayede tüm belgenin parse/serialize
@@ -1366,30 +1248,82 @@ function findImgTagBySrc(xsltCode: string, imgSrc: string): string | null {
   return xsltCode.substring(before, after + 1);
 }
 
-function parseWrapperStyle(xsltCode: string, imgSrc: string, property: string): string {
+interface DirectWrapperDiv {
+  /** Div'in açılış etiketi, örn. `<div style="text-align:center">` */
+  divOpen: string;
+  /** div açılış etiketinin başlangıç indeksi (dahil) */
+  divStart: number;
+  /** div açılış etiketinin bitiş indeksi (harici, `>` sonrası) */
+  divEnd: number;
+  /** `<img` etiketinin başlangıç indeksi */
+  imgStart: number;
+  /** img etiketinin bitiş indeksi (harici, `>` sonrası) */
+  imgEnd: number;
+}
+
+/**
+ * Bir görseli DOĞRUDAN saran kapsayıcı div'i bulur.
+ *
+ * "Doğrudan sarma" şartı: div'in açılış etiketi ile <img> etiketi arasında
+ * yalnızca boşluk olabilir. Şart sağlanmazsa (ör. tablo hücresindeki bir img
+ * için uzaktaki bir ata div bulunursa) null döner — böylece stil okuma ve
+ * yazma işlemleri hiçbir zaman yanlış elemana dokunmaz.
+ *
+ * Kısa src (<200 karakter, örn. "logo.png") belirsiz olabileceği için regex ile,
+ * uzun src (base64) için indeks tabanlı arama ile bulunur; ikisi de aynı
+ * güvenlik şartını uygular.
+ */
+function findDirectWrapperDiv(xsltCode: string, imgSrc: string): DirectWrapperDiv | null {
+  if (!imgSrc) return null;
+
   if (imgSrc.length < 200) {
     const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const wrapperMatch = xsltCode.match(new RegExp(`<div[^>]*>\\s*<img[^>]*src\\s*=\\s*["']${escapedSrc}["']`, 'i'));
-    if (!wrapperMatch) return '';
-    const wrapperStart = wrapperMatch[0];
-    const styleMatch = wrapperStart.match(/style\s*=\s*["']([^"']*)["']/i);
-    if (styleMatch) {
-      return parseImgStyle(styleMatch[1], property);
-    }
-    return '';
+    const wrapperRegex = new RegExp(
+      `(<div\\b[^>]*>)(\\s*)(<img\\b[^>]*src\\s*=\\s*["']${escapedSrc}["'][^>]*/?>)`,
+      'i'
+    );
+    const match = wrapperRegex.exec(xsltCode);
+    if (!match) return null;
+    const divStart = match.index;
+    const divEnd = divStart + match[1].length;
+    return {
+      divOpen: match[1],
+      divStart,
+      divEnd,
+      imgStart: divEnd + match[2].length,
+      imgEnd: match.index + match[0].length,
+    };
   }
+
+  // Uzun src (base64): dev regex yerine indeks tabanlı arama.
   const srcIdx = xsltCode.indexOf(imgSrc);
-  if (srcIdx === -1) return '';
-  const beforeDiv = xsltCode.lastIndexOf('<div', srcIdx);
-  if (beforeDiv === -1) return '';
-  const divEnd = xsltCode.indexOf('>', beforeDiv);
-  if (divEnd === -1 || divEnd < srcIdx) return '';
-  const divOpenTag = xsltCode.substring(beforeDiv, divEnd + 1);
-  const styleMatch = divOpenTag.match(/style\s*=\s*["']([^"']*)["']/i);
-  if (styleMatch) {
-    return parseImgStyle(styleMatch[1], property);
-  }
-  return '';
+  if (srcIdx === -1) return null;
+  const divStart = xsltCode.lastIndexOf('<div', srcIdx);
+  if (divStart === -1) return null;
+  const divEnd = xsltCode.indexOf('>', divStart);
+  if (divEnd === -1 || divEnd >= srcIdx) return null;
+  const imgStart = xsltCode.indexOf('<img', divEnd);
+  if (imgStart === -1 || imgStart > srcIdx) return null;
+  // GÜVENLİK: div ile img arasında başka içerik olmamalı. Arada bir şey varsa
+  // bulunan div bir ata elemandır — okuma da yazma da yapılmaz.
+  const between = xsltCode.slice(divEnd + 1, imgStart);
+  if (!/^\s*$/.test(between)) return null;
+  const imgEnd = xsltCode.indexOf('>', imgStart);
+  if (imgEnd === -1 || imgEnd < srcIdx) return null;
+  return {
+    divOpen: xsltCode.slice(divStart, divEnd + 1),
+    divStart,
+    divEnd: divEnd + 1,
+    imgStart,
+    imgEnd: imgEnd + 1,
+  };
+}
+
+function parseWrapperStyle(xsltCode: string, imgSrc: string, property: string): string {
+  const wrapper = findDirectWrapperDiv(xsltCode, imgSrc);
+  if (!wrapper) return '';
+  const styleMatch = wrapper.divOpen.match(/style\s*=\s*["']([^"']*)["']/i);
+  return styleMatch ? parseImgStyle(styleMatch[1], property) : '';
 }
 
 function updateImgStyleInTag(tagContent: string, property: string, value: string): string {
@@ -1446,29 +1380,17 @@ function updateImgTagBySrc(xsltCode: string, imgSrc: string, property: string, v
 }
 
 function updateWrapperDivByImgSrc(xsltCode: string, imgSrc: string, property: string, value: string): string {
-  if (imgSrc.length < 200) {
-    const escapedSrc = imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const wrapperRegex = new RegExp(`(<div\\b[^>]*>)\\s*\\n?\\s*(<img\\b[^>]*src\\s*=\\s*["']${escapedSrc}["'][^>]*/?>)`, 'i');
-    return xsltCode.replace(wrapperRegex, (_match, divOpen, imgTag) => {
-      const updatedDiv = updateImgStyleInTag(divOpen, property, value);
-      return updatedDiv + '\n' + imgTag;
-    });
-  }
-  const srcIdx = xsltCode.indexOf(imgSrc);
-  if (srcIdx === -1) return xsltCode;
-  const beforeDiv = xsltCode.lastIndexOf('<div', srcIdx);
-  if (beforeDiv === -1) return xsltCode;
-  const divClose = xsltCode.indexOf('>', beforeDiv);
-  if (divClose === -1 || divClose >= srcIdx) return xsltCode;
-  const divOpen = xsltCode.substring(beforeDiv, divClose + 1);
-  const afterDiv = xsltCode.indexOf('<img', divClose);
-  if (afterDiv === -1) return xsltCode;
-  const imgClose = xsltCode.indexOf('>', afterDiv);
-  if (imgClose === -1) return xsltCode;
-  const imgTag = xsltCode.substring(afterDiv, imgClose + 1);
-  const updatedDiv = updateImgStyleInTag(divOpen, property, value);
-  const oldFragment = xsltCode.substring(beforeDiv, imgClose + 1);
-  return xsltCode.replace(oldFragment, updatedDiv + '\n' + imgTag);
+  const wrapper = findDirectWrapperDiv(xsltCode, imgSrc);
+  if (!wrapper) return xsltCode;
+  // updateImgStyleInTag sözleşmesi gereği kapanış '>' OLMADAN çağrılır
+  // (updateImgTagBySrc de öyle yapar). '>' dahil edilirse yeni nitelik
+  // etiketin DIŞINA, metin olarak yazılır: <div> style="..."  ← bozuk çıktı.
+  const openWithoutGt = wrapper.divOpen.slice(0, -1);
+  const updatedOpen = updateImgStyleInTag(openWithoutGt, property, value);
+  if (updatedOpen + '>' === wrapper.divOpen) return xsltCode;
+  // Yalnızca div'in açılış etiketi değişir; görsel etiketine, aradaki
+  // boşluklara ve div'in kalanına dokunulmaz.
+  return xsltCode.slice(0, wrapper.divStart) + updatedOpen + '>' + xsltCode.slice(wrapper.divEnd);
 }
 
 export function extractAllImagesFromXslt(xsltCode: string): ImageInfo[] {
@@ -1506,24 +1428,12 @@ export function extractAllImagesFromXslt(xsltCode: string): ImageInfo[] {
     const wrapperMargin = parseWrapperStyle(xsltCode, src, 'margin');
     const wrapperFloat = parseWrapperStyle(xsltCode, src, 'float');
 
-    let wrapperClass = '';
-    if (src.length < 200) {
-      const wrapperClassMatch = xsltCode.match(new RegExp(`<div\\b([^>]*)>\\s*<img[^>]*src\\s*=\\s*["']${src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`, 'i'));
-      wrapperClass = wrapperClassMatch?.[1]?.match(/class\s*=\s*["']([^"']*)["']/i)?.[1] || '';
-    } else {
-      const srcIdx = xsltCode.indexOf(src);
-      if (srcIdx !== -1) {
-        const beforeDiv = xsltCode.lastIndexOf('<div', srcIdx);
-        if (beforeDiv !== -1) {
-          const divEnd = xsltCode.indexOf('>', beforeDiv);
-          if (divEnd !== -1 && divEnd < srcIdx) {
-            const divAttrs = xsltCode.substring(beforeDiv + 4, divEnd);
-            const clsMatch = divAttrs.match(/class\s*=\s*["']([^"']*)["']/i);
-            wrapperClass = clsMatch ? clsMatch[1] : '';
-          }
-        }
-      }
-    }
+    // Yalnızca görseli doğrudan saran div'in sınıfı okunur; uzaktaki bir ata
+    // div'in sınıfı yanlışlıkla bu görsele atfedilmez.
+    const wrapper = findDirectWrapperDiv(xsltCode, src);
+    const wrapperClass = wrapper
+      ? wrapper.divOpen.match(/class\s*=\s*["']([^"']*)["']/i)?.[1] || ''
+      : '';
 
     results.push({
       src, alt, className, xsltId, index, isBase64, previewSrc,
