@@ -9,7 +9,12 @@
     "lint": "oxlint",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "toggle": "node scripts/toggle-feature.mjs",
+    "test:e2e": "playwright test",
+    "verify": "npm run lint && npm run build && npm run check:templates && npm run test -- --run && npm run test:e2e",
+    "deadcode": "knip",
+    "check:templates": "node scripts/check-templates.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -21,12 +26,15 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "@vitest/coverage-v8": "^4.1.11",
     "@vitest/ui": "^4.1.10",
     "happy-dom": "^20.10.6",
+    "knip": "^6.41.0",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
