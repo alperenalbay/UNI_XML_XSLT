@@ -4,6 +4,15 @@ export const DEFAULT_XML = `<?xml version="1.0" encoding="UTF-8"?>
          xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
          xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2">
     <cbc:UUID>f47ac10b-58cc-4372-a567-0e02b2c3d479</cbc:UUID>
+    <!--
+      cbc:ProfileID UBL-TR e-faturada ZORUNLU bir alandır ve cbc:ID'den once gelir.
+      onceki ornek veride bu alan YOKTU. Gibbs sablonu fatura tipi basligini
+      <xsl:for-each select="//n1:Invoice/cbc:ProfileID"> icine yaziyor; alan
+      olmayinca for-each sifir kez donuyor ve baslik hic basilmadan bos
+      <h1> kaliyordu. Ayni sey imza yuvasini da bos birakiyordu.
+      TEMELIRSALIYE = standart e-Fatura profili.
+    -->
+    <cbc:ProfileID>TEMELIRSALIYE</cbc:ProfileID>
     <cbc:ID>DEV2026000000456</cbc:ID>
     <cbc:IssueDate>2026-07-07</cbc:IssueDate>
     <cbc:IssueTime>13:30:00</cbc:IssueTime>
