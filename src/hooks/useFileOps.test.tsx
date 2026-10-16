@@ -1,6 +1,6 @@
 import { act, useEffect, type ChangeEvent, type DragEvent, type RefObject } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { useEditorStore } from '../store/editorStore';
 import { useFileOps } from './useFileOps';
 
@@ -30,8 +30,8 @@ describe('useFileOps', () => {
   let container: HTMLDivElement;
   let root: Root;
   let api: FileOpsApi | null = null;
-  let updateXmlContent: ReturnType<typeof vi.fn>;
-  let updateXsltContent: ReturnType<typeof vi.fn>;
+  let updateXmlContent: Mock<(value: string) => void>;
+  let updateXsltContent: Mock<(value: string) => void>;
   let iframeRef: RefObject<HTMLIFrameElement | null>;
   const OriginalFileReader = globalThis.FileReader;
 
@@ -40,8 +40,8 @@ describe('useFileOps', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     api = null;
-    updateXmlContent = vi.fn();
-    updateXsltContent = vi.fn();
+    updateXmlContent = vi.fn<(value: string) => void>();
+    updateXsltContent = vi.fn<(value: string) => void>();
     iframeRef = { current: null };
     useEditorStore.setState({ editorActiveTab: 'xml', isDragging: false });
 

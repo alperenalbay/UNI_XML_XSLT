@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import Editor from '@monaco-editor/react'
+import Editor, { type OnMount } from '@monaco-editor/react'
+import type { ElementDetails, ImageInfo } from './utils/xsltTransformer'
+
+type MonacoEditorInstance = Parameters<OnMount>[0];
+type MonacoInstance = Parameters<OnMount>[1];
 import { 
   FileCode, 
   RefreshCw, 
@@ -51,9 +55,16 @@ import {
   getImageTransformFromXslt,
   setImageTransformInXslt
 } from './utils/xsltTransformer'
+import {
+  PREVIEW_SANDBOX,
+  stripTemplateScripts,
+  countTemplateScripts,
+  buildScriptDisabledNotice,
+  isTrustedPreviewMessage,
+} from './utils/previewScripts'
+import { detectSheetSize, mmToPx } from './utils/sheetSize'
 import { DEFAULT_XML, DEFAULT_DESPATCH_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
-import { ToastContainer, useToast } from './components'
-import { WatermarkPanel } from './components/WatermarkPanel'
+import { ToastContainer, useToast, WatermarkPanel } from './components'
 import { useEditorStore } from './store/editorStore'
 import { useFileOps } from './hooks'
 
@@ -99,18 +110,50 @@ function App() {
   } = useEditorStore();
 
   const previewLayout = 'A4';
-  const allowPreviewScripts =
-    previewTrustedMode || editorActiveTab === 'imag-editor' || designerActive || inspectorActive;
-  const previewSandbox = previewTrustedMode
-    ? 'allow-same-origin allow-scripts allow-modals'
-    : allowPreviewScripts
-      ? 'allow-same-origin allow-scripts allow-modals'
-      : 'allow-same-origin allow-modals';
+  // Sandbox SABİTTİR (bkz. src/utils/previewScripts.ts). Değişken olması,
+  // aynı commit'te değişen srcDoc ile yarışıp önizleme script'lerini
+  // sessizce blokluyordu.
+  const previewSandbox = PREVIEW_SANDBOX;
+  // Uygulamanın kendi etkileşim script'leri (sütun boyutlandırma, görsel
+  // sürükle-bırak) tasarım özelliklerinin temeli; her zaman enjekte edilir.
+  const allowPreviewScripts = true;
+
+  // Baskı sayfasının gerçek boyutu. Şablon `@page { size: ... }` ile fiş
+  // genişliğini bildiriyorsa (ör. 80mm) ona uyarız; bildirmiyorsa A4.
+  // Sabit 210mm/794px varsaymak, fiş şablonlarını ekranda küçük gösteriyordu.
+  const sheetSize = useMemo(() => detectSheetSize(htmlOutput), [htmlOutput]);
+  const sheetWidthMm = sheetSize.widthMm;
+  const sheetHeightMm = sheetSize.heightMm;
+  const sheetWidthPx = mmToPx(sheetWidthMm);
+  const sheetMinHeight = sheetHeightMm === null ? '0' : `${sheetHeightMm}mm`;
+  const sheetWidthCss = `${sheetWidthMm}mm`;
+
+  /**
+   * Önizleme belgesini "kâğıt sayfa" gibi gösterir: beyaz zemin, gölge,
+   * ortalanmış, şablonun gerçek genişliğinde ve verilen zoom seviyesinde.
+   *
+   * ÖNEMLİ: Hem `handleIframeLoad` hem zoom effect'i bu değerleri yazıyordu.
+   * İki kopya ayrı güncellendiği için yeniden "sürüklenme" (bir yerde A4,
+   * diğer yerde başka değer) riski doğuyordu. Tek kaynak burası.
+   */
+  const applySheetStyle = useCallback((iframeDoc: Document, scale: number) => {
+    const body = iframeDoc.body;
+    if (!body) return;
+    body.style.transform = `scale(${scale})`;
+    body.style.transformOrigin = 'top center';
+    body.style.width = sheetWidthCss;
+    body.style.minHeight = sheetMinHeight;
+    body.style.margin = '24px auto';
+    body.style.padding = '10px';
+    body.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4)';
+    body.style.backgroundColor = '#ffffff';
+    body.style.transition = 'transform 0.15s ease-out';
+  }, [sheetWidthCss, sheetMinHeight]);
 
   // Selected Element Details (for WYSIWYG Styler)
   const [selectedSelector, setSelectedSelector] = useState<string>('')
   const [selectedElementName, setSelectedElementName] = useState<string>('')
-  const [selectedElementDetails, setSelectedElementDetails] = useState<any>(null)
+  const [selectedElementDetails, setSelectedElementDetails] = useState<ElementDetails | null>(null)
   const [showTableBorders, setShowTableBorders] = useState<boolean>(false)
 
   // CSS values for Selected Element
@@ -130,7 +173,7 @@ function App() {
   const [selectedLineNumber, setSelectedLineNumber] = useState<number>(0)
 
   // Image management state
-  const [designerImages, setDesignerImages] = useState<any[]>([])
+  const [designerImages, setDesignerImages] = useState<ImageInfo[]>([])
   const [expandedImageIdx, setExpandedImageIdx] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const replaceImageRef = useRef<{ src: string; index: number } | null>(null)
@@ -140,18 +183,33 @@ function App() {
   const [imageTransforms, setImageTransforms] = useState<Record<number, { x: number; y: number }>>({})
   const [pendingTransforms, setPendingTransforms] = useState<Record<string, { x: number; y: number }>>({})
 
-  const loadCustomTemplates = useCallback(async () => {
+  const templatesToastShown = useRef(false);
+  const templatesLoading = useRef(false);
+
+  const loadCustomTemplates = useCallback(async (opts?: { silent?: boolean }) => {
+    // StrictMode çift-effect ve hızlı sekme geçişlerinde aynı anda
+    // birden fazla fetch yarışmasın; biri abort olup sahte hata verir.
+    if (templatesLoading.current) return;
+    templatesLoading.current = true;
+    const silent = opts?.silent ?? false;
     try {
       const res = await fetch('/api/list-templates')
       if (res.ok) {
         const data = await res.json()
         setCustomTemplates(data)
-        addToast({
-          type: 'success',
-          message: 'Şablonlar Yüklendi',
-          description: `${data.length} şablon bulundu`
-        })
-      } else {
+        // Başarı toast'ı yalnızca ilk yüklemede gösterilir; sonraki
+        // arka plan yenilemeleri (sekme ziyareti, kayıt sonrası) sessizdir.
+        if (!templatesToastShown.current) {
+          templatesToastShown.current = true
+          if (!silent) {
+            addToast({
+              type: 'success',
+              message: 'Şablonlar Yüklendi',
+              description: `${data.length} şablon bulundu`
+            })
+          }
+        }
+      } else if (!silent) {
         addToast({
           type: 'warning',
           message: 'Şablon Yükleme Başarısız',
@@ -160,11 +218,18 @@ function App() {
       }
     } catch (err) {
       console.error('Failed to load custom templates:', err)
-      addToast({
-        type: 'error',
-        message: 'Şablon Hatası',
-        description: 'Şablonlar yüklenirken hata oluştu'
-      })
+      // Ekranda gösterilecek kayıtlı liste varken sessiz geçiştir;
+      // liste boşsa gerçek bir hata vardır, toast göster.
+      const hasCached = useEditorStore.getState().customTemplates.length > 0
+      if (!silent || !hasCached) {
+        addToast({
+          type: 'error',
+          message: 'Şablon Hatası',
+          description: 'Şablonlar yüklenirken hata oluştu'
+        })
+      }
+    } finally {
+      templatesLoading.current = false;
     }
   }, [setCustomTemplates, addToast])
 
@@ -176,7 +241,7 @@ function App() {
   // Auto reload custom templates list when user visits Status Report tab
   useEffect(() => {
     if (previewActiveTab === 'logs') {
-      loadCustomTemplates()
+      loadCustomTemplates({ silent: true })
     }
   }, [previewActiveTab, loadCustomTemplates])
 
@@ -272,7 +337,7 @@ function App() {
     const widths: Record<number, string> = {}
     const aligns: Record<number, string> = {}
     const margins: Record<number, string> = {}
-    images.forEach((img: any, i: number) => {
+    images.forEach((img: ImageInfo, i: number) => {
       widths[i] = getImageStyleFromXslt(xsltContent, img.src, 'width') || '300px'
       aligns[i] = getImageStyleFromXslt(xsltContent, img.src, 'text-align') || 'center'
       margins[i] = getImageStyleFromXslt(xsltContent, img.src, 'margin') || '10px 0px'
@@ -282,7 +347,7 @@ function App() {
     setImageMargins(margins)
 
     const transforms: Record<number, { x: number; y: number }> = {}
-    images.forEach((img: any, i: number) => {
+    images.forEach((img: ImageInfo, i: number) => {
       transforms[i] = getImageTransformFromXslt(xsltContent, img.src)
     })
     setImageTransforms(transforms)
@@ -330,7 +395,7 @@ function App() {
     e.target.value = ''
   }
 
-  const handleReplaceImage = (image: any) => {
+  const handleReplaceImage = (image: ImageInfo) => {
     replaceImageRef.current = { src: image.src, index: image.index }
     fileInputRef.current?.click()
   }
@@ -351,7 +416,7 @@ function App() {
       if (!result.error) setHtmlOutput(result.html)
 
       const newTransforms: Record<number, { x: number; y: number }> = {}
-      designerImages.forEach((img: any, i: number) => {
+      designerImages.forEach((img: ImageInfo, i: number) => {
         const pend = pendingTransforms[img.src]
         if (pend) newTransforms[i] = pend
         else newTransforms[i] = imageTransforms[i] || { x: 0, y: 0 }
@@ -389,12 +454,13 @@ function App() {
   // Drag & Drop / Banner state (Zustand state references)
 
   // Editor References
-  const xmlEditorRef = useRef<any>(null)
-  const xsltEditorRef = useRef<any>(null)
+  const xmlEditorRef = useRef<MonacoEditorInstance | null>(null)
+  const xsltEditorRef = useRef<MonacoEditorInstance | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const previewContainerRef = useRef<HTMLDivElement>(null)
 
-  // Auto-fit A4 preview width to preview panel container width
+  // Auto-fit: sayfayı önizleme panelinin genişliğine sığdır.
+  // Ölçülen genişlik, sabit 794px değil; şablonun beyan ettiği gerçek boyut.
   useEffect(() => {
     if (previewActiveTab !== 'preview') return
 
@@ -404,8 +470,8 @@ function App() {
         // 32px padding (16px left + 16px right)
         const availableWidth = width - 32
         if (availableWidth > 0) {
-          // Calculate scale percentage to fit 210mm (794px)
-          const fitScale = Math.min(100, Math.floor((availableWidth / 794) * 100))
+          // Ölçek yüzdesi = panel genişliği / sayfa genişliği
+          const fitScale = Math.min(100, Math.floor((availableWidth / sheetWidthPx) * 100))
           setZoomPercent(Math.max(30, fitScale))
         }
       }
@@ -421,7 +487,7 @@ function App() {
     return () => {
       observer.disconnect()
     }
-  }, [previewActiveTab, isAutoFit, setZoomPercent])
+  }, [previewActiveTab, isAutoFit, setZoomPercent, sheetWidthPx])
 
   // Apply visual zoom internally inside the iframe document
   useEffect(() => {
@@ -429,19 +495,8 @@ function App() {
       if (iframeRef.current && previewActiveTab === 'preview') {
         const iframeDoc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
         if (iframeDoc && iframeDoc.body) {
-          const scale = zoomPercent / 100
-          
-          // Style the body as an A4 document sheet centered in the slate view
-          iframeDoc.body.style.transform = `scale(${scale})`
-          iframeDoc.body.style.transformOrigin = 'top center'
-          iframeDoc.body.style.width = '210mm'
-          iframeDoc.body.style.minHeight = '297mm'
-          iframeDoc.body.style.margin = '24px auto'
-          iframeDoc.body.style.padding = '10px'
-          iframeDoc.body.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4)'
-          iframeDoc.body.style.backgroundColor = '#ffffff'
-          iframeDoc.body.style.transition = 'transform 0.15s ease-out'
-          
+          applySheetStyle(iframeDoc, zoomPercent / 100)
+
           // Set root HTML element styling of the iframe to fit the theme and scroll natively
           const htmlEl = iframeDoc.documentElement
           if (htmlEl) {
@@ -463,20 +518,20 @@ function App() {
 
     const timer = setTimeout(applyIframeZoom, 100)
     return () => clearTimeout(timer)
-  }, [zoomPercent, htmlOutput, previewActiveTab, appTheme])
+  }, [zoomPercent, htmlOutput, previewActiveTab, appTheme, applySheetStyle])
 
   // Monaco karakter genişliğini ilk mount anında (webfont henüz gelmeden) ölçerse
   // satır sonunda büyüyen kümülatif imleç kayması olur. `editor.layout()` bunu
   // düzeltmez; resmi yöntem `monaco.editor.remeasureFonts()` + `editor.layout()`.
-  const stabilizeMonacoEditor = (editor: any, monaco: any) => {
+  const stabilizeMonacoEditor = (ed: MonacoEditorInstance, monaco: MonacoInstance) => {
     const remeasure = () => {
       try { monaco?.editor?.remeasureFonts?.() } catch { /* noop */ }
-      try { editor.layout() } catch { /* noop */ }
+      try { ed.layout() } catch { /* noop */ }
     }
     requestAnimationFrame(remeasure)
     try {
-      const fonts = (document as any)?.fonts
-      const loads: Promise<any>[] = []
+      const fonts = document.fonts
+      const loads: Promise<FontFace[]>[] = []
       if (fonts?.load) {
         // Editörlerde kullanılan tüm boyut/ağırlıklar için fontu bilerek yüklet
         for (const size of [12, 13, 14]) {
@@ -492,18 +547,18 @@ function App() {
     } catch { /* noop */ }
   }
 
-  const handleXmlEditorMount = (editor: any, monaco: any) => {
-    xmlEditorRef.current = editor
-    stabilizeMonacoEditor(editor, monaco)
+  const handleXmlEditorMount = (ed: MonacoEditorInstance, monaco: MonacoInstance) => {
+    xmlEditorRef.current = ed
+    stabilizeMonacoEditor(ed, monaco)
   }
 
-  const handleXsltEditorMount = (editor: any, monaco: any) => {
-    xsltEditorRef.current = editor
-    stabilizeMonacoEditor(editor, monaco)
+  const handleXsltEditorMount = (ed: MonacoEditorInstance, monaco: MonacoInstance) => {
+    xsltEditorRef.current = ed
+    stabilizeMonacoEditor(ed, monaco)
   }
 
-  const handleHtmlEditorMount = (editor: any, monaco: any) => {
-    stabilizeMonacoEditor(editor, monaco)
+  const handleHtmlEditorMount = (ed: MonacoEditorInstance, monaco: MonacoInstance) => {
+    stabilizeMonacoEditor(ed, monaco)
   }
 
   // NOT: `value` prop'u zaten kontrollü senkron yapıyor. Burada manuel
@@ -651,18 +706,17 @@ function App() {
     };
 
     if (rawHtml) {
-      // Debug: log watermark state in preview composition
-      // eslint-disable-next-line no-console
-      console.log('[uni-watermark-debug]', {
-        hasHtmlOutput: !!htmlOutput,
-        watermarkVisible,
-        hasWatermarkImage: !!watermarkImage,
-        watermarkImagePrefix: watermarkImage ? watermarkImage.substring(0, 40) + '...' : '(empty)',
-        watermarkSize,
-        watermarkOpacity,
-        editorActiveTab,
-        designerActive,
-      });
+      // Trusted mod KAPALIYKEN şablonun kendi script'leri önizlemeden çıkarılır.
+      // Sandbox'ta allow-scripts her zaman açık kaldığı için (uygulamanın kendi
+      // etkileşim script'leri gerekiyor) bu, çalıştırmayı seçime bağlar.
+      // Kullanıcı nedenini görsün diye şablonda kaç script olduğunu da söylüyoruz.
+      if (!previewTrustedMode) {
+        const scriptCount = countTemplateScripts(rawHtml);
+        if (scriptCount > 0) {
+          rawHtml = stripTemplateScripts(rawHtml);
+          rawHtml = injectIntoDocument(rawHtml, buildScriptDisabledNotice(scriptCount));
+        }
+      }
       const printStyles = `
         @media print {
           html, body {
@@ -688,17 +742,20 @@ function App() {
       
       let styleRules = '';
       let scriptCode = '';
-      if (inspectorActive) {
-        styleRules = `
-          body {
-            width: 210mm !important;
-            min-height: 297mm !important;
+      // Sayfa ölçüleri şablonun kendi beyanından gelir (bkz. sheetSize.ts);
+      // A4 varsayımı kullanmak 80mm fişleri tasarım modunda bozuyordu.
+      const sheetBodyCss = `
+            width: ${sheetWidthCss} !important;
+            min-height: ${sheetMinHeight} !important;
             margin: 24px auto !important;
             padding: 10px !important;
             background-color: #ffffff !important;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4) !important;
             box-sizing: border-box !important;
-          }
+      `;
+      if (inspectorActive) {
+        styleRules = `
+          body {${sheetBodyCss}}
           table, div {
             max-width: 100% !important;
             box-sizing: border-box !important;
@@ -711,15 +768,7 @@ function App() {
         `;
       } else if (designerActive) {
         styleRules = `
-          body {
-            width: 210mm !important;
-            min-height: 297mm !important;
-            margin: 24px auto !important;
-            padding: 10px !important;
-            background-color: #ffffff !important;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4) !important;
-            box-sizing: border-box !important;
-          }
+          body {${sheetBodyCss}}
           table, div {
             max-width: 100% !important;
             box-sizing: border-box !important;
@@ -1047,8 +1096,8 @@ function App() {
       const safeOpacity = Math.max(0, Math.min(100, Math.round(watermarkOpacity)));
       const safeRotation = Math.round(watermarkRotation);
       // Single absolute overlay positioned over the body (which is `position:relative` + `transform:scale`
-      // in handleIframeLoad, making it the containing block). Concrete 210mm×297mm dimensions ensure
-      // the overlay covers the whole A4 page. `z-index:0` keeps it BEHIND the invoice content
+      // in handleIframeLoad, making it the containing block). Concrete dimensions ensure
+      // the overlay covers the whole page. `z-index:0` keeps it BEHIND the invoice content
       // (which is rendered with the default stacking context above z-index:0 overlay when positioned),
       // so the watermark acts as a background watermark rather than covering/overlaying the content.
       // Watermark rendered IN FRONT of content (high z-index) but with low opacity + pointer-events:none +
@@ -1058,12 +1107,14 @@ function App() {
       // the watermark, giving the feel of a background watermark even though it's stacked on top.
       // On print, multiply + transparent areas won't print as solid blocks (and the print stylesheet
       // removes the scale transform), so the watermark stays subtle on physical output too.
+      // Sayfa ölçüleri şablonun beyanından gelir; A4 varsayımı 80mm fişlerde
+      // filigranı sayfadan taşırıyordu.
       const overlayStyle = [
         'position:absolute',
         'top:0',
         'left:0',
-        'width:210mm',
-        'height:297mm',
+        `width:${sheetWidthCss}`,
+        `height:${sheetMinHeight === '0' ? '100%' : sheetMinHeight}`,
         'display:flex',
         'align-items:center',
         'justify-content:center',
@@ -1088,17 +1139,10 @@ function App() {
       } else {
         rawHtml = previewWatermarkBlock + rawHtml;
       }
-      // eslint-disable-next-line no-console
-      console.log('[uni-watermark-debug] watermark block injected', {
-        blockLength: previewWatermarkBlock.length,
-        hasBody: rawHtml.includes('<body'),
-        rawHtmlIncludesWatermark: rawHtml.includes('uni-watermark-preview-overlay'),
-        rawHtmlLength: rawHtml.length,
-      });
     }
 
     return rawHtml || '<p style="padding: 20px; color: #64748b; font-family: sans-serif; text-align: center;">Dönüştürülmüş fatura görüntüsü burada görüntülenecektir.</p>';
-  }, [htmlOutput, errorMsg, inspectorActive, designerActive, showTableBorders, watermarkVisible, watermarkImage, watermarkSize, watermarkOpacity, watermarkRotation, editorActiveTab, allowPreviewScripts])
+  }, [htmlOutput, errorMsg, inspectorActive, designerActive, showTableBorders, watermarkVisible, watermarkImage, watermarkSize, watermarkOpacity, watermarkRotation, editorActiveTab, previewTrustedMode, sheetWidthCss, sheetMinHeight])
 
   // Attach event listeners and apply layout sizing inside the iframe document on load
   const handleIframeLoad = () => {
@@ -1108,7 +1152,7 @@ function App() {
 
     const iframeWindow = iframeRef.current.contentWindow;
     if (iframeWindow) {
-      const win = iframeWindow as any;
+      const win = iframeWindow as unknown as Window & { onerror: unknown; console: Console };
       setIframeLogs([]);
 
       try {
@@ -1124,7 +1168,7 @@ function App() {
         console.warn("Could not register window message listener inside iframe", e);
       }
       
-      win.onerror = (message: any, _source: any, lineno: any, colno: any) => {
+      win.onerror = (message: string | Event, _source?: string, lineno?: number, colno?: number) => {
         const errStr = `[Hata] ${message} (${lineno}:${colno})`;
         setIframeLogs(prev => [...prev, errStr]);
         return false;
@@ -1133,7 +1177,7 @@ function App() {
       try {
         if (win.console && win.console.error) {
           const originalConsoleError = win.console.error;
-          win.console.error = (...args: any[]) => {
+          win.console.error = (...args: unknown[]) => {
             const errStr = `[Konsol Hatası] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}`;
             setIframeLogs(prev => [...prev, errStr]);
             originalConsoleError.apply(win.console, args);
@@ -1145,21 +1189,11 @@ function App() {
     }
 
     // Apply document styling & scale
-    const scale = zoomPercent / 100
-    if (innerDoc.body) {
-      innerDoc.body.style.transform = `scale(${scale})`
-      innerDoc.body.style.transformOrigin = 'top center'
-      innerDoc.body.style.width = '210mm'
-      innerDoc.body.style.minHeight = '297mm'
-      innerDoc.body.style.margin = '24px auto'
-      innerDoc.body.style.padding = '10px'
-      innerDoc.body.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4)'
-      innerDoc.body.style.backgroundColor = '#ffffff'
-      innerDoc.body.style.transition = 'transform 0.15s ease-out'
-
-      if (designerActive) {
-        innerDoc.body.style.position = 'relative';
-      }
+    applySheetStyle(innerDoc, zoomPercent / 100)
+    if (designerActive && innerDoc.body) {
+      // Sürükle-bırak için konumlandırma bağlamı (handleIframeLoad içinde
+      // yapılıyordu; zoom effect'i bunu korumadığı için sürükleniyordu).
+      innerDoc.body.style.position = 'relative';
     }
     
     const htmlEl = innerDoc.documentElement
@@ -1226,7 +1260,7 @@ function App() {
 
         const text = target.innerText?.trim() || ''
         const win = innerDoc.defaultView
-        const computed = win ? win.getComputedStyle(target) : {} as any
+        const computed = win ? win.getComputedStyle(target) : {} as CSSStyleDeclaration
         const styles = {
           margin: target.style.margin || target.style.marginTop || computed.margin || computed.marginTop || '',
           padding: target.style.padding || target.style.paddingTop || computed.padding || computed.paddingTop || '',
@@ -1253,7 +1287,7 @@ function App() {
               const cols = colGroup.querySelectorAll('col');
               if (cols && cols[cellIndex]) {
                 colXsltId = cols[cellIndex].getAttribute('data-xslt-id') || '';
-                const colComputed = win ? win.getComputedStyle(cols[cellIndex]) : {} as any;
+                const colComputed = win ? win.getComputedStyle(cols[cellIndex]) : {} as CSSStyleDeclaration;
                 colWidth = cols[cellIndex].style.width || cols[cellIndex].getAttribute('width') || colComputed.width || '';
               }
             }
@@ -1454,6 +1488,13 @@ function App() {
     const handleInspectorMessage = (event: MessageEvent) => {
       if (!event.data) return
 
+      // GÜVENLİK: Bu kanaldan gelen mesajlar XSLT kodunu doğrudan değiştiriyor
+      // (xslt-text-edit, xslt-column-resized, görsel sürükle-bırak...), bu
+      // yüzden origin doğrulanır. `event.source === iframe.contentWindow`
+      // kontrolü srcDoc+sandbox iframe'lerde güvenilir DEĞİL (bkz.
+      // utils/previewScripts.ts) ve kullanılmamalıdır.
+      if (!isTrustedPreviewMessage(event.origin, window.location.origin)) return;
+
       const { source, text, className, tagName, id, original, current, targetTagName, targetSrc, targetHref, xsltId, imageIndex, isQrCode, colXsltId, colWidth, cellXsltId, tableXsltId, styles, message, lineno, colno, args } = event.data
 
       if (source === 'iframe-error') {
@@ -1649,7 +1690,7 @@ function App() {
     }
 
     // Helper helper to generate search priorities
-    const getSearchTerms = (id: string, className: any, text: string, tagName: string) => {
+    const getSearchTerms = (id: string, className: string, text: string, tagName: string) => {
       const searchTerms: string[] = []
       if (id) {
         searchTerms.push(`id="${id}"`)
@@ -1740,11 +1781,12 @@ function App() {
     // Write style changes back into Monaco editor (Prefer direct line text update, fallback to element ID inline style, fallback to style block)
     let updated = xsltContent
     const isWidth = property.toLowerCase() === 'width';
-    const targetId = (isWidth && selectedElementDetails?.colXsltId) ? selectedElementDetails.colXsltId : selectedElementDetails?.xsltId;
+    const colXsltId = selectedElementDetails?.colXsltId;
+    const targetId = (isWidth && colXsltId) ? colXsltId : selectedElementDetails?.xsltId;
     
     let targetLine = selectedLineNumber;
-    if (isWidth && selectedElementDetails?.colXsltId) {
-      const colLine = findLineByXsltId(xsltContent, selectedElementDetails.colXsltId);
+    if (isWidth && colXsltId) {
+      const colLine = findLineByXsltId(xsltContent, colXsltId);
       if (colLine > 0) targetLine = colLine;
     }
 
@@ -1764,8 +1806,8 @@ function App() {
 
 
   // Visual layout XML addition/removals
-  const handleAddTextElement = (parentSelector: string, details?: any) => {
-    const updated = addElementToXslt(xsltContent, parentSelector, "Yeni Metin Alanı (Düzenlemek için çift tıklayın)", details)
+  const handleAddTextElement = (parentSelector: string, details?: ElementDetails | null) => {
+    const updated = addElementToXslt(xsltContent, parentSelector, "Yeni Metin Alanı (Düzenlemek için çift tıklayın)", details ?? undefined)
     if (updated !== xsltContent) {
       updateXsltContent(updated)
       setInspectorStatus("Boş alana yeni metin kutusu eklendi.")
@@ -1773,9 +1815,9 @@ function App() {
     }
   }
 
-  const handleRemoveElement = (selector: string, details?: any) => {
+  const handleRemoveElement = (selector: string, details?: ElementDetails | null) => {
     if (!selector && !details?.xsltId && !details?.tableXsltId) return
-    const updated = removeElementFromXslt(xsltContent, selector, details)
+    const updated = removeElementFromXslt(xsltContent, selector, details ?? undefined)
     if (updated !== xsltContent) {
       updateXsltContent(updated)
       setSelectedSelector('')
@@ -1807,7 +1849,7 @@ function App() {
         setInspectorStatus(`"${saveTemplateName}" şablonu başarıyla kaydedildi.`)
         setTimeout(() => setInspectorStatus(null), 3000)
         setSaveTemplateName('')
-        await loadCustomTemplates()
+        await loadCustomTemplates({ silent: true })
       } else {
         alert('Şablon kaydedilirken sunucu hatası oluştu.')
       }
@@ -2119,7 +2161,7 @@ function App() {
               ].map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => setAppTheme(t.id as any)}
+                  onClick={() => setAppTheme(t.id as 'linear' | 'vercel' | 'forest' | 'stripe' | 'notion')}
                   className={`h-4.5 w-4.5 rounded-full ${t.color} border transition transform hover:scale-110 cursor-pointer ${
                     appTheme === t.id ? 'border-zen-primary scale-105 ring-2 ring-zen-accent/50' : 'border-transparent opacity-65 hover:opacity-100'
                   }`}
@@ -2457,7 +2499,7 @@ function App() {
               ].map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => setAppTheme(t.id as any)}
+                  onClick={() => setAppTheme(t.id as 'linear' | 'vercel' | 'forest' | 'stripe' | 'notion')}
                   className={`h-4.5 w-4.5 rounded-full ${t.color} border transition transform hover:scale-110 cursor-pointer ${
                     appTheme === t.id ? 'border-zen-primary scale-105 ring-2 ring-zen-accent/50' : 'border-transparent opacity-65 hover:opacity-100'
                   }`}
@@ -2967,7 +3009,7 @@ function App() {
                           </div>
 
                           {/* Border Presets (Only show for table cells/rows/tables) */}
-                          {['td', 'th', 'tr', 'table', 'col'].includes(selectedElementDetails?.targetTagName) && (
+                          {['td', 'th', 'tr', 'table', 'col'].includes(selectedElementDetails?.targetTagName ?? '') && (
                             <div className="col-span-1 md:col-span-2 pt-3 border-t border-slate-700/60 text-xs">
                               <span className="text-[11px] text-slate-400 block mb-1.5 font-semibold">Hücre Kenarlık Ayarı:</span>
                               <div className="flex gap-1.5 flex-wrap">
@@ -3785,10 +3827,10 @@ function App() {
                       ? 'bg-amber-600/20 hover:bg-amber-600/30 border-amber-500/40 text-amber-300'
                       : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
                   }`}
-                  title="Trusted Mode açıkken önizlemede script çalıştırılabilir. Sadece güvendiğiniz şablonlarda açın."
+                  title="KAPALI: şablondaki script'ler önizlemeden tamamen kaldırılır (barkod/QR çalışmaz). Tanımadığınız bir XSLT'yi incelerken güvenli mod. AÇIK: şablonun kendi script'leri önizlemede çalışır."
                 >
                   <AlertTriangle className="h-3.5 w-3.5" />
-                  {previewTrustedMode ? 'Trusted: AÇIK' : 'Trusted: KAPALI'}
+                  {previewTrustedMode ? "Script'ler: AÇIK" : "Script'ler: KAPALI"}
                 </button>
               )}
 
@@ -3850,12 +3892,12 @@ function App() {
               </div>
             )}
 
-            {/* Aspect Ratio and Zoom Toolbar (only visible in A4 preview mode) */}
+            {/* Zoom toolbar — label reflects the template's declared page size */}
             {previewActiveTab === 'preview' && previewLayout === 'A4' && (
               <div className="mb-2 px-3 py-1.5 bg-slate-900/60 border border-slate-900 rounded-lg flex items-center justify-between text-xs text-slate-400 shrink-0">
                 <span className="flex items-center gap-1 text-[11px] font-medium text-slate-400">
                   <Info className="h-3.5 w-3.5 text-indigo-400 animate-pulse" />
-                  Önizleme A4 baskı şablonuyla eş ölçeklidir.
+                  Önizleme {sheetSize.label} baskı şablonuyla eş ölçeklidir.
                 </span>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1">
@@ -4372,7 +4414,7 @@ function App() {
                               Kaydedilmiş Özel Şablonlarınız ({customTemplates.length})
                             </span>
                             <button
-                              onClick={loadCustomTemplates}
+                              onClick={() => loadCustomTemplates()}
                               className="p-1 hover:bg-slate-800 rounded transition text-slate-500 hover:text-slate-300 cursor-pointer"
                               title="Şablon listesini diskten yeniden tara ve güncelle"
                             >

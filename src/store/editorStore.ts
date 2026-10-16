@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { PREVIEW_TRUSTED_DEFAULT } from '../utils/previewScripts';
 
 export interface ValidationStatus {
   xmlValid: boolean;
@@ -11,7 +12,7 @@ export interface ValidationStatus {
 export interface SelectedElementDetails {
   selector: string;
   elementName: string;
-  details: any;
+  details: Record<string, unknown> | null;
   styles: {
     margin: string;
     padding: string;
@@ -169,7 +170,7 @@ const initialState: EditorState = {
   previewActiveTab: 'preview',
   editorLayout: 'tabbed',
   autoRefresh: true,
-  previewTrustedMode: false,
+  previewTrustedMode: PREVIEW_TRUSTED_DEFAULT,
   isCopied: false,
   validationStatus: { xmlValid: true, xsltValid: true },
   
