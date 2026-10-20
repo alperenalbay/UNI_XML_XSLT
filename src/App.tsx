@@ -63,10 +63,10 @@ import {
   isTrustedPreviewMessage,
 } from './utils/previewScripts'
 import { detectSheetSize, mmToPx } from './utils/sheetSize'
-import { DEFAULT_XML, DEFAULT_DESPATCH_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
+import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 import { ToastContainer, useToast, WatermarkPanel } from './components'
 import { useEditorStore } from './store/editorStore'
-import { useFileOps } from './hooks'
+import { useFileOps, useTemplates } from './hooks'
 
 
 function App() {
@@ -2006,36 +2006,12 @@ function App() {
     handleClear,
   } = useFileOps(updateXmlContent, updateXsltContent, iframeRef)
 
-  const loadDefaultSample = () => {
-    updateXmlContent(DEFAULT_XML)
-    updateXsltContent(DEFAULT_XSLT)
-    setErrorMsg(undefined)
-  }
-
-  const getMatchingSampleXml = (xslt: string): string => {
-    if (!xslt) return DEFAULT_XML
-    const checks = [
-      /DespatchAdvice/i,
-      /DespatchLine/i,
-      /DespatchSupplierParty/i,
-      /ActualDespatchDate/i
-    ]
-    if (checks.some((re) => re.test(xslt))) {
-      return DEFAULT_DESPATCH_XML
-    }
-    return DEFAULT_XML
-  }
-
-  const loadTemplateWithSampleXml = (xslt: string) => {
-    const currentXml = xmlContent || ''
-    const isDespatchTemplate = /DespatchAdvice|DespatchLine|DespatchSupplierParty|ActualDespatchDate/i.test(xslt)
-    const xmlHasDespatch = currentXml.includes('DespatchAdvice') || currentXml.includes('DespatchLine')
-    const typeMatches = (isDespatchTemplate && xmlHasDespatch) || (!isDespatchTemplate && !xmlHasDespatch)
-    if (!currentXml.trim() || !typeMatches) {
-      updateXmlContent(getMatchingSampleXml(xslt))
-    }
-    updateXsltContent(xslt)
-  }
+  const { loadDefaultSample, getMatchingSampleXml, loadTemplateWithSampleXml } = useTemplates(
+    xmlContent,
+    updateXmlContent,
+    updateXsltContent,
+    setErrorMsg
+  )
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
