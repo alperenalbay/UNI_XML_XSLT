@@ -4,6 +4,7 @@ import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 
 const WM_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="420" height="140" viewBox="0 0 420 140">
   <text x="210" y="95" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="bold" fill="#b45309" text-anchor="middle" transform="rotate(-15 210 70)" opacity="0.85">ÖDENDİ</text>
@@ -15,10 +16,28 @@ mkdirSync(SCREENS, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+async function ensureServer() {
+  try {
+    const r = await fetch('http://localhost:5173/api/list-templates');
+    if (r.ok) return;
+  } catch {}
+  console.log('dev sunucusu kapali, baslatiliyor...');
+  const child = spawn('npm', ['run', 'dev'], { stdio: 'ignore', shell: true, detached: false });
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const r = await fetch('http://localhost:5173/api/list-templates');
+      if (r.ok) { console.log('dev sunucusu ayakta'); return; }
+    } catch {}
+  }
+  throw new Error('dev sunucusu baslatilamadi');
+}
+
 async function main() {
   const wmSvgPath = path.join(tmpdir(), 'watermark-odendi.svg');
   writeFileSync(wmSvgPath, WM_SVG, 'utf8');
 
+  await ensureServer();
   const browser = await chromium.launch({ headless: true });
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
