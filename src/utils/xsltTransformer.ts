@@ -345,7 +345,10 @@ function applyNobrWrap(el: Element, enabled: boolean) {
   const isWrapped = firstChild && firstChild.tagName.toLowerCase() === 'nobr';
 
   if (enabled && !isWrapped) {
-    const nobr = doc.createElement('nobr');
+    // createElementNS(null, ...) — açıkça boş ad alanı kullanılır.
+    // createElement('nobr') DOM uygulamasına göre XHTML ad alanı verebilir
+    // (happy-dom öyle yapıyor) ve çıktıya boş bir xmlns özniteliği bulaşırdı.
+    const nobr = doc.createElementNS(null, 'nobr');
     while (el.firstChild) {
       nobr.appendChild(el.firstChild);
     }

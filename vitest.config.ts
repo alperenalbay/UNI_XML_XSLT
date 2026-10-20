@@ -35,7 +35,7 @@ export default defineConfig({
         // seviyenin biraz altı sabitlendi; xsltTransformer testleri
         // genişletildikçe yükseltilmeli.
         'src/utils/xsltTransformer.ts': {
-          lines: 55,
+          lines: 70,
         },
         // Yeni yazılan saf yardımcılar tam kapsamda; düşerse bir şey bozulmuş.
         'src/utils/previewScripts.ts': { lines: 95 },
