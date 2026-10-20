@@ -18,6 +18,7 @@ import {
 } from '../utils/xsltTransformer';
 import type { ElementDetails } from '../utils/xsltTransformer';
 import { isTrustedPreviewMessage } from '../utils/previewScripts';
+import { getSearchTerms } from '../utils/xsltCodeSearch';
 import type { ImageInfo } from '../utils/xsltTransformer';
 
 export interface InspectorMessageDeps {
@@ -49,30 +50,6 @@ export interface InspectorMessageDeps {
 
 interface SearchableLine {
   findLineInCode: (code: string, searchTerms: string[]) => number;
-}
-
-/** Search priority list for locating an element's line in the XSLT source. */
-function getSearchTerms(id: string, className: string, text: string, tagName: string): string[] {
-  const searchTerms: string[] = [];
-  if (id) {
-    searchTerms.push(`id="${id}"`);
-    searchTerms.push(`id='${id}'`);
-  }
-  if (className && typeof className === 'string') {
-    const classes = className.split(/\s+/).filter((c) => c.trim().length > 1 && c !== 'hover' && c !== 'uni-selected-element');
-    classes.forEach((c) => {
-      searchTerms.push(`class="${c}"`);
-      searchTerms.push(`class='${c}'`);
-      searchTerms.push(`.${c}`);
-    });
-  }
-  if (text && text.length > 2 && text.length < 40) {
-    searchTerms.push(text.replace(/['"]/g, ''));
-  }
-  if (tagName) {
-    searchTerms.push(`<${tagName}`);
-  }
-  return searchTerms;
 }
 
 /** Convert an rgb()/rgba() color to #hex for the HTML5 color input. */
@@ -321,5 +298,6 @@ export function useInspectorMessages(deps: InspectorMessageDeps, lineFinder: Sea
 
     window.addEventListener('message', handleInspectorMessage);
     return () => window.removeEventListener('message', handleInspectorMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [xsltContent, designerImages, selectedElementDetails?.xsltId, updateXsltContent, setIframeLogs, jumpToXsltLine, setInspectorStatus, findLineInCode, revealXsltLine]);
 }

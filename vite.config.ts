@@ -33,7 +33,7 @@ const templateServerPlugin = () => ({
           let remoteHash: string;
           try {
             remoteHash = execSync(`git rev-parse @{u}`).toString().trim();
-          } catch (upstreamErr: any) {
+          } catch {
             // İzlenen uzak dal yoksa (ör. yeni dal), remote'u dal adıyla varsay.
             remoteHash = execSync(
               `git rev-parse origin/${branch} 2>nul || git rev-parse origin/main`

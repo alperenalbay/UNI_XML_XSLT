@@ -14,7 +14,6 @@ const BASE = 'http://localhost:5173';
 const SCREENS = '.openchamber/screenshots';
 mkdirSync(SCREENS, { recursive: true });
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function ensureServer() {
   try {
@@ -22,7 +21,7 @@ async function ensureServer() {
     if (r.ok) return;
   } catch {}
   console.log('dev sunucusu kapali, baslatiliyor...');
-  const child = spawn('npm', ['run', 'dev'], { stdio: 'ignore', shell: true, detached: false });
+  const _child = spawn('npm', ['run', 'dev'], { stdio: 'ignore', shell: true, detached: false });
   for (let i = 0; i < 40; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     try {

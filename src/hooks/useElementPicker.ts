@@ -4,7 +4,7 @@
 // clicking inside the iframe — the list is rebuilt from the live preview DOM.
 import { useCallback, useEffect, useState } from 'react';
 
-export interface ElementPickerOption {
+interface ElementPickerOption {
   id: string;
   label: string;
 }

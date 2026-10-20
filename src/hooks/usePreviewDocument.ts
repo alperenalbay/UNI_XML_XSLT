@@ -300,5 +300,5 @@ export function usePreviewDocument(opts: PreviewDocumentOptions): string {
     }
 
     return rawHtml || EMPTY_PREVIEW;
-  }, [htmlOutput, errorMsg, inspectorActive, designerActive, showTableBorders, watermarkVisible, watermarkImage, watermarkSize, watermarkOpacity, watermarkRotation, editorActiveTab, previewTrustedMode, sheetWidthCss, sheetMinHeight]);
+  }, [htmlOutput, errorMsg, inspectorActive, designerActive, showTableBorders, watermarkVisible, watermarkImage, watermarkSize, watermarkOpacity, watermarkRotation, editorActiveTab, allowPreviewScripts, previewTrustedMode, sheetWidthCss, sheetMinHeight]);
 }
