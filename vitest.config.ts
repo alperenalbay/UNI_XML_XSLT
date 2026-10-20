@@ -29,13 +29,13 @@ export default defineConfig({
       ],
       thresholds: {
         // Global taban: sessiz gerilemeyi engeller. Gerçek oran ~%51.
-        lines: 48,
+        lines: 50,
         // Çekirdek dönüşüm mantığı — en zayıf halka, yükseltilmesi gereken yer.
         // Şu an %43; buraya %60 koymak testleri kırar, o yüzden mevcut
         // seviyenin biraz altı sabitlendi; xsltTransformer testleri
         // genişletildikçe yükseltilmeli.
         'src/utils/xsltTransformer.ts': {
-          lines: 40,
+          lines: 55,
         },
         // Yeni yazılan saf yardımcılar tam kapsamda; düşerse bir şey bozulmuş.
         'src/utils/previewScripts.ts': { lines: 95 },

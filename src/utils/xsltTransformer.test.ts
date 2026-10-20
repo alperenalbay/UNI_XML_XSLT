@@ -15,6 +15,11 @@ import {
   extractAllImagesFromXslt,
   replaceImageInXslt,
   addImageToXslt,
+  updateXsltText,
+  updateXsltStyle,
+  getXsltStyleValue,
+  getImageTransformFromXslt,
+  updateElementTextInXsltById,
 } from './xsltTransformer';
 
 describe('xsltTransformer', () => {
@@ -647,6 +652,70 @@ describe('xsltTransformer', () => {
 
     it('boş belgeye eklememezlik eder', () => {
       expect(addImageToXslt('', 'logo.png', 'L')).toBe('');
+    });
+  });
+
+  describe('updateXsltText', () => {
+    it('tüm geçişleri değiştirir', () => {
+      const xslt = '<xsl:text>Merhaba</xsl:text><xsl:text>Merhaba</xsl:text>';
+      expect(updateXsltText(xslt, 'Merhaba', 'Selam')).toBe('<xsl:text>Selam</xsl:text><xsl:text>Selam</xsl:text>');
+    });
+    it('boş veya aynı metinde dokunmaz', () => {
+      const xslt = '<xsl:text>Merhaba</xsl:text>';
+      expect(updateXsltText(xslt, '', 'Selam')).toBe(xslt);
+      expect(updateXsltText(xslt, 'Merhaba', 'Merhaba')).toBe(xslt);
+    });
+    it('bulunamayan metinde dokunmaz', () => {
+      const xslt = '<xsl:text>Merhaba</xsl:text>';
+      expect(updateXsltText(xslt, 'Yok', 'Selam')).toBe(xslt);
+    });
+  });
+
+  describe('updateXsltStyle / getXsltStyleValue', () => {
+    const xslt = `<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <head><style>.title { font-size: 12px; color: red; }</style></head>
+</xsl:stylesheet>`;
+    it('stil bloğundan değer okur', () => {
+      expect(getXsltStyleValue(xslt, '.title', 'font-size')).toBe('12px');
+      expect(getXsltStyleValue(xslt, '.title', 'color')).toBe('red');
+      expect(getXsltStyleValue(xslt, '.yok', 'color')).toBe('');
+    });
+    it('mevcut özelliği günceller', () => {
+      const r = updateXsltStyle(xslt, '.title', 'color', 'blue');
+      expect(r).toContain('color: blue');
+    });
+    it('yeni özellik ekler', () => {
+      const r = updateXsltStyle(xslt, '.title', 'font-weight', 'bold');
+      expect(r).toContain('font-weight: bold');
+    });
+    it('boş girdide dokunmaz', () => {
+      expect(updateXsltStyle('', '.title', 'color', 'blue')).toBe('');
+      expect(getXsltStyleValue('', '.title', 'color')).toBe('');
+    });
+  });
+
+  describe('getImageTransformFromXslt / setImageTransformInXslt', () => {
+    const xslt = `<img src="logo.png" style="transform: translate(10px, 20px);" />`;
+    it('transform değerini okur', () => {
+      expect(getImageTransformFromXslt(xslt, 'logo.png')).toEqual({ x: 10, y: 20 });
+    });
+    it('transform yoksa 0,0 döner', () => {
+      expect(getImageTransformFromXslt('<img src="logo.png" />', 'logo.png')).toEqual({ x: 0, y: 0 });
+    });
+    it('transform ayarlar', () => {
+      const r = setImageTransformInXslt(xslt, 'logo.png', 50, -30);
+      expect(r).toContain('translate(50px, -30px)');
+    });
+    it('boş girdide dokunmaz', () => {
+      expect(setImageTransformInXslt('', 'logo.png', 10, 20)).toBe('');
+      expect(getImageTransformFromXslt('', 'logo.png')).toEqual({ x: 0, y: 0 });
+    });
+  });
+
+  describe('updateElementTextInXsltById', () => {
+    it('boş girdide dokunmaz', () => {
+      expect(updateElementTextInXsltById('', '1', 'yeni')).toBe('');
+      expect(updateElementTextInXsltById('<root/>', '', 'yeni')).toBe('<root/>');
     });
   });
 });
