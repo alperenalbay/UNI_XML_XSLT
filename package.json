@@ -14,13 +14,14 @@
     "test:e2e": "playwright test",
     "verify": "npm run lint && npm run build && npm run check:templates && npm run test -- --run && npm run test:e2e",
     "deadcode": "knip",
-  "qa": "node scripts/run-qa.mjs",
-  "design:restoran": "node scripts/design-restoran.mjs",
-  "design:eczane": "node scripts/design-eczane.mjs",
-  "design:market": "node scripts/design-market.mjs",
-  "design:lojistik": "node scripts/design-lojistik.mjs",
-  "design:kafe": "node scripts/design-kafe.mjs",
-    "check:templates": "node scripts/check-templates.mjs"
+    "qa": "node scripts/run-qa.mjs",
+    "design:restoran": "node scripts/design-restoran.mjs",
+    "design:eczane": "node scripts/design-eczane.mjs",
+    "design:market": "node scripts/design-market.mjs",
+    "design:lojistik": "node scripts/design-lojistik.mjs",
+    "design:kafe": "node scripts/design-kafe.mjs",
+    "check:templates": "node scripts/check-templates.mjs",
+    "smoke": "node scripts/smoke-templates.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
