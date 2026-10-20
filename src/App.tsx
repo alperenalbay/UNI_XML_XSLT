@@ -64,7 +64,7 @@ import { COLUMN_RESIZE_SCRIPT } from './utils/columnResizeScript'
 import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 import { ToastContainer, useToast, WatermarkPanel } from './components'
 import { useEditorStore } from './store/editorStore'
-import { useFileOps, useTemplates, useElementOps, useStyleOps } from './hooks'
+import { useFileOps, useTemplates, useElementOps, useStyleOps, useInlineTextEdit } from './hooks'
 
 
 function App() {
@@ -1719,57 +1719,12 @@ function App() {
     }
   }
 
-  const handleEditTextElement = () => {
-    const iframe = document.getElementById('xslt-preview-iframe') as HTMLIFrameElement
-    if (!iframe) return
-    const innerDoc = iframe.contentDocument || iframe.contentWindow?.document
-    if (!innerDoc) return
-
-    let selectedEl = innerDoc.querySelector('.uni-selected-element') as HTMLElement
-    if (!selectedEl && selectedElementDetails?.xsltId) {
-      selectedEl = innerDoc.querySelector(`[data-xslt-id="${selectedElementDetails.xsltId}"]`) as HTMLElement
-    }
-    if (!selectedEl && selectedSelector) {
-      try {
-        selectedEl = innerDoc.querySelector(selectedSelector) as HTMLElement
-      } catch (e) {
-        console.warn('Invalid selector query', e)
-      }
-    }
-
-    if (selectedEl) {
-      const originalText = selectedEl.innerText || ''
-      selectedEl.setAttribute('data-original-text', originalText)
-      selectedEl.setAttribute('data-xslt-id-editable', selectedEl.getAttribute('data-xslt-id') || '')
-      
-      selectedEl.contentEditable = "true"
-      selectedEl.focus()
-      
-      // Select text contents to make it easy to overwrite
-      const range = innerDoc.createRange()
-      range.selectNodeContents(selectedEl)
-      const selection = iframe.contentWindow?.getSelection()
-      if (selection) {
-        selection.removeAllRanges()
-        selection.addRange(range)
-      }
-
-      // Pressing Enter will blur (which triggers focusout to save)
-      const handleEnter = (ev: KeyboardEvent) => {
-        if (ev.key === 'Enter' && !ev.shiftKey) {
-          ev.preventDefault()
-          selectedEl.blur()
-        }
-      }
-      selectedEl.addEventListener('keydown', handleEnter, { once: true })
-
-      setInspectorStatus("Metin düzenleniyor... Çıkmak için Enter'a basın veya dışarıya tıklayın.")
-      setTimeout(() => setInspectorStatus(null), 4000)
-    } else {
-      setInspectorStatus("Düzenlemek için lütfen önce faturadan bir metin alanı seçin.")
-      setTimeout(() => setInspectorStatus(null), 3000)
-    }
-  }
+  const { handleEditTextElement } = useInlineTextEdit(
+    iframeRef,
+    selectedElementDetails,
+    selectedSelector,
+    setInspectorStatus
+  )
 
   // Category Quick Jump triggers
   const quickJumpTo = (category: 'css' | 'supplier' | 'customer' | 'title' | 'items' | 'totals') => {
