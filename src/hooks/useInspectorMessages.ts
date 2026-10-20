@@ -25,7 +25,7 @@ export interface InspectorMessageDeps {
   designerImages: ImageInfo[];
   selectedElementDetails: ElementDetails | null;
   updateXsltContent: (xslt: string) => void;
-  setIframeLogs: (fn: (prev: string[]) => string[]) => void;
+  setIframeLogs: (logs: string[] | ((prev: string[]) => string[])) => void;
   setInspectorStatus: (msg: string | null) => void;
   setPendingTransforms: (fn: (prev: Record<string, { x: number; y: number }>) => Record<string, { x: number; y: number }>) => void;
   setSelectedElementDetails: (d: ElementDetails | null) => void;
