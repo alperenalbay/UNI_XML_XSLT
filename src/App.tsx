@@ -51,6 +51,7 @@ import { usePreviewIframe } from './hooks/usePreviewIframe'
 import { useAppUpdate } from './hooks/useAppUpdate'
 import { useImageManager } from './hooks/useImageManager'
 import { useTemplateLibrary } from './hooks/useTemplateLibrary'
+import { useElementPicker } from './hooks/useElementPicker'
 import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 import { ToastContainer, useToast, WatermarkPanel } from './components'
 import { useEditorStore } from './store/editorStore'
@@ -154,54 +155,6 @@ function App() {
   const [selectedElementName, setSelectedElementName] = useState<string>('')
   const [selectedElementDetails, setSelectedElementDetails] = useState<ElementDetails | null>(null)
   const [showTableBorders, setShowTableBorders] = useState<boolean>(false)
-  // Element picker: lets the user select a preview element from a searchable
-  // list instead of clicking inside the iframe (list-based fallback for the
-  // WYSIWYG panel).
-  const [elementPickerOptions, setElementPickerOptions] = useState<Array<{ id: string; label: string }>>([])
-  const [elementPickerFilter, setElementPickerFilter] = useState<string>('')
-
-  // Refresh the picker list from the live preview DOM. Runs when the dropdown
-  // opens, so the list always reflects the latest transformed output.
-  const refreshElementPickerOptions = () => {
-    try {
-      const innerDoc = iframeRef.current?.contentDocument
-      if (!innerDoc) {
-        setElementPickerOptions([])
-        return
-      }
-      const list: Array<{ id: string; label: string }> = []
-      innerDoc.querySelectorAll<HTMLElement>('[data-xslt-id]').forEach((el) => {
-        const id = el.getAttribute('data-xslt-id')
-        if (!id) return
-        const tag = el.tagName.toLowerCase()
-        // Skip structural wrappers that "contain" the whole document text and
-        // would drown the list (their innerText equals the entire page).
-        if (['html', 'body', 'head', 'title', 'script', 'style', 'meta', 'link'].includes(tag)) return
-        const text = (el.innerText || '').trim().replace(/\s+/g, ' ')
-        // Keep elements that carry text, plus images and table cells (those
-        // have their own panel controls).
-        if (text.length === 0 && tag !== 'img' && tag !== 'td' && tag !== 'th') return
-        const src = el.getAttribute('src')
-        const srcNote = src ? (src.startsWith('data:') ? 'görsel' : src.slice(0, 28)) : 'boş'
-        const label = text
-          ? `${tag} · ${text.slice(0, 48)}${text.length > 48 ? 'â€¦' : ''}`
-          : `${tag} · ${srcNote}`
-        list.push({ id, label })
-      })
-      setElementPickerOptions(list.slice(0, 500))
-    } catch {
-      setElementPickerOptions([])
-    }
-  }
-
-  // Keep the picker list in sync with the latest transformed preview. The
-  // transform is async, so refresh shortly after the content changes.
-  useEffect(() => {
-    if (editorActiveTab !== 'designer') return
-    const t = setTimeout(() => refreshElementPickerOptions(), 350)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editorActiveTab, xsltContent])
 
   // CSS values for Selected Element
   const [styleMargin, setStyleMargin] = useState<string>('')
@@ -258,6 +211,14 @@ function App() {
   const xsltEditorRef = useRef<MonacoEditorInstance | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const previewContainerRef = useRef<HTMLDivElement>(null)
+
+  // Element picker: select a preview element from a searchable list instead
+  // of clicking inside the iframe.
+  const {
+    elementPickerOptions,
+    elementPickerFilter,
+    setElementPickerFilter,
+  } = useElementPicker(iframeRef, editorActiveTab, xsltContent)
 
   // Auto-fit: sayfayı önizleme panelinin genişliğine sığdır.
   // Ölçülen genişlik, sabit 794px değil; şablonun beyan ettiği gerçek boyut.
