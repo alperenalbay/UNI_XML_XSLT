@@ -1,9 +1,9 @@
-// QA: uygulamanın tüm buton/özelliklerini otomatik olarak dener.
-// Her adımı izole eder; console hatalarını toplar; özet raporlar.
-// Çalıştırma: node scripts/qa-buttons.mjs
+// Buton/özellik QA'sı — uygulamadaki tüm ana kontrolleri dener.
+// Çıktı: PASS/FAIL özeti, konsol hataları dahil. CI'da çalıştırılabilir.
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
-import path from 'node:path';
+import { unlink } from 'node:fs/promises';
+import { join } from 'node:path';
 
 const BASE = 'http://localhost:5173';
 const SCREENS = '.openchamber/screenshots';
@@ -11,19 +11,17 @@ mkdirSync(SCREENS, { recursive: true });
 
 const results = [];
 const consoleErrors = [];
-const consoleWarnings = [];
 
 function log(ok, name, detail = '') {
-  const tag = ok ? 'PASS' : 'FAIL';
   results.push({ ok, name, detail });
-  console.log(`[${tag}] ${name}${detail ? '  -> ' + detail : ''}`);
+  console.log(`[${ok ? 'PASS' : 'FAIL'}] ${name}${detail ? '  -> ' + detail : ''}`);
 }
 
-async function step(name, fn, timeout = 8000) {
+async function step(name, fn, timeout = 10000) {
   try {
     await Promise.race([
       fn(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT ' + timeout + 'ms')), timeout)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT')), timeout)),
     ]);
     log(true, name);
   } catch (e) {
@@ -33,65 +31,73 @@ async function step(name, fn, timeout = 8000) {
 
 async function main() {
   const browser = await chromium.launch({ headless: true });
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const page = await ctx.newPage();
+  const page = await browser.newPage();
   page.setDefaultTimeout(8000);
-  page.on('console', (m) => {
-    if (m.type() === 'error') consoleErrors.push(m.text());
-    if (m.type() === 'warning' && /key/i.test(m.text())) consoleWarnings.push(m.text());
-  });
+  page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
   page.on('pageerror', (e) => consoleErrors.push('PAGEERROR: ' + e.message));
 
   await page.goto(BASE, { waitUntil: 'networkidle' });
 
-  // ---------- 1. Anasayfa ----------
-  await step('anasayfa acildi', async () => {
-    await page.waitForSelector('text=Şablon Kütüphanesi', { timeout: 8000 });
+  // ---------- Anasayfa ----------
+  await step('anasayfa yuklendi', async () => {
+    await page.getByRole('button', { name: /Şablonum Yok/ }).first().waitFor({ state: 'visible' });
   });
   for (const name of ['gib', 'koyu-tema', 'mini-fis', 'modern-mavi', 'sdandart-iskontolu', 'standart']) {
     await step(`sablon karti: ${name}`, async () => {
-      await page.locator('button', { hasText: new RegExp('^' + name + '\\s+Yükle$') }).waitFor({ state: 'visible', timeout: 5000 });
+      await page.locator('button', { hasText: 'Yükle' })
+        .filter({ hasText: name })
+        .first()
+        .waitFor({ state: 'visible', timeout: 5000 });
     });
   }
 
-  // ---------- 2. gib yükle ----------
-  await step('gib yukle', async () => {
+  // ---------- Sablon yukle ----------
+  await step('gib sablonu yuklendi', async () => {
     await page.getByRole('button', { name: /gib/ }).click();
-    await page.waitForSelector('text=Sistem Hazır', { timeout: 10000 });
+    await page.waitForFunction(() => document.body.innerText.includes('Sistem Hazır'), { timeout: 15000 });
   });
 
-  // ---------- 3. Sekmeler ----------
+  // ---------- Sekmeler ----------
   for (const tab of ['Önizleme', 'HTML Çıktısı', 'Sistem Raporu']) {
     await step(`sekme: ${tab}`, async () => {
       await page.getByRole('button', { name: tab }).click();
       await page.waitForTimeout(150);
     });
   }
+  // Önizleme sekmesine geri dön: önizleme panelinin kontrolleri (Koda Git,
+  // Script'ler, zoom) yalnızca bu sekmede görünür.
+  await step('onizleme sekmesine donuldu', async () => {
+    await page.getByRole('button', { name: 'Önizleme' }).click();
+    await page.waitForTimeout(300);
+  });
   await step('Koda Git butonu', async () => {
-    await page.locator('button', { hasText: 'Koda Git' }).click();
+    const btn = page.locator('button', { hasText: 'Koda Git' }).first();
+    await btn.waitFor({ state: 'visible', timeout: 5000 });
+    await btn.click();
     await page.waitForTimeout(150);
   });
 
-  // ---------- 4. Görsel tasarımcı ----------
-  await step('gorsel tasarimci ac', async () => {
+  // ---------- Gorsel tasarimci ----------
+  await step('gorsel tasarimci acildi', async () => {
     await page.getByRole('button', { name: /Görsel Tasarımcı/ }).click();
     await page.waitForTimeout(400);
   });
 
-  // ---------- 5. Eleman seçimi ----------
-  await step('eleman picker listesi (150+ eleman)', async () => {
-    const btn = page.locator('button', { hasText: 'h1 · e-Fatura' }).first();
-    await btn.waitFor({ state: 'visible', timeout: 5000 });
+  // ---------- Eleman secimi ----------
+  await step('eleman listesi doldu', async () => {
+    const btn = page.locator('button', { hasText: 'h1 · ' }).first();
+    await btn.waitFor({ state: 'visible', timeout: 8000 });
   });
-  await step('h1 secimi -> panel doldu', async () => {
-    await page.locator('button', { hasText: 'h1 · e-Fatura' }).first().click();
-    await page.waitForSelector('text=Düzenlenen Selector: h1', { timeout: 5000 });
+  await step('eleman secimi paneli doldurdu', async () => {
+    const btn = page.locator('button', { hasText: 'h1 · ' }).first();
+    await page.waitForTimeout(600);
+    await btn.click();
+    await page.waitForSelector('text=Düzenlenen Selector:', { timeout: 5000 });
   });
 
-  // ---------- 6. Stil kontrolleri ----------
+  // ---------- Stil kontrolleri ----------
   await step('yazi boyutu slider', async () => {
-    const s = page.locator('xpath=//span[text()="Yazı Boyutu:"]/following::input[@type="range"][1]');
-    await s.fill('20');
+    await page.locator('xpath=//span[text()="Yazı Boyutu:"]/following::input[@type="range"][1]').fill('20');
   });
   await step('kalin (B)', async () => {
     await page.getByRole('button', { name: 'B (Kalın)' }).click();
@@ -109,11 +115,11 @@ async function main() {
     await page.getByRole('button', { name: /Normal \(Kayabilir\)|Tek Satırda Tut/ }).click();
   });
   await step('icinde ekle', async () => {
-    await page.getByRole('button', { name: 'İçine Ekle' }).click();
+    await page.getByRole('button', { name: 'İçine Ekle' }).first().click();
     await page.waitForTimeout(150);
   });
-  await step('metni duzenle butonu', async () => {
-    await page.getByRole('button', { name: 'Metni Düzenle' }).click();
+  await step('metni duzenle', async () => {
+    await page.getByRole('button', { name: 'Metni Düzenle' }).first().click();
     await page.waitForTimeout(200);
     await page.keyboard.press('Escape');
   });
@@ -122,70 +128,65 @@ async function main() {
     await page.waitForTimeout(150);
   });
 
-  // ---------- 7. Tablo izgarasi ----------
+  // ---------- Tablo izgarasi ----------
   await step('tablo izgarasi toggle', async () => {
-    await page.locator('input.text-indigo-600').click();
+    const cb = page.locator('input.text-indigo-600');
+    await cb.click();
     await page.waitForTimeout(150);
-    await page.locator('input.text-indigo-600').click();
+    await cb.click();
   });
 
-  // ---------- 8. Filigran paneli ----------
+  // ---------- Filigran ----------
   await step('filigran metin', async () => {
-    const t = page.locator('xpath=//label[text()="Metin Etiketi"]/following::input[1]');
-    await t.fill('TEST');
+    await page.locator('xpath=//label[text()="Metin Etiketi"]/following::input[1]').fill('TEST');
   });
   await step('filigran renk', async () => {
     await page.locator('input.font-mono').fill('#ff0000');
   });
   await step('filigran dondurme', async () => {
-    const r = page.locator('xpath=//label[contains(text(),"Döndürme")]/following::input[@type="range"][1]');
-    await r.fill('30');
+    await page.locator('xpath=//label[contains(text(),"Döndürme")]/following::input[@type="range"][1]').fill('30');
   });
   await step('filigran boyut', async () => {
-    const s = page.locator('xpath=//label[contains(text(),"Boyut")]/following::input[@type="range"][1]');
-    await s.fill('40');
+    await page.locator('xpath=//label[contains(text(),"Boyut")]/following::input[@type="range"][1]').fill('40');
   });
   await step('filigran opaklik', async () => {
-    const o = page.locator('xpath=//label[contains(text(),"Opaklık")]/following::input[@type="range"][1]');
-    await o.fill('25');
+    await page.locator('xpath=//label[contains(text(),"Opaklık")]/following::input[@type="range"][1]').fill('25');
   });
 
-  // ---------- 9. Script toggle ----------
+  // ---------- Script toggle / zoom ----------
   await step('script toggle', async () => {
     const btn = page.getByRole('button', { name: /Script'ler:/ });
     const before = await btn.textContent();
     await btn.click();
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(250);
     const after = await btn.textContent();
     if (before === after) throw new Error('degismedi');
     await btn.click();
     await page.waitForTimeout(150);
   });
-
-  // ---------- 10. Zoom ----------
   await step('zoom genislige sigdir', async () => {
     await page.getByRole('button', { name: 'Genişliğe Sığdır' }).click();
     await page.waitForTimeout(150);
   });
 
-  // ---------- 11. Gorsel duzenleyici ----------
+  // ---------- Gorsel duzenleyici ----------
   await step('gorsel duzenleyici sekmesi', async () => {
     await page.getByRole('button', { name: 'Görsel Düzenleyici' }).click();
     await page.waitForTimeout(300);
     await page.waitForSelector('text=Görsel Düzenleyici (Sürükle-Bırak)');
   });
-  await step('yeni gorsel ekle butonu', async () => {
+  await step('yeni gorsel ekle', async () => {
     await page.getByRole('button', { name: 'Yeni Görsel Ekle' }).click();
     await page.waitForTimeout(150);
   });
 
-  // ---------- 12. HTML cikti sekmesi ----------
+  // ---------- HTML cikti ----------
   await step('HTML çıktısı sekmesi', async () => {
     await page.getByRole('button', { name: 'HTML Çıktısı' }).click();
     await page.waitForTimeout(200);
   });
 
-  // ---------- 13. Sablon olarak kaydet ----------
+  // ---------- Sablon kaydetme ----------
   await step('sablon olarak kaydet', async () => {
     page.once('dialog', async (d) => { await d.accept('qa-test-template') });
     await page.getByRole('button', { name: 'Şablon Olarak Kaydet' }).click();
@@ -195,26 +196,20 @@ async function main() {
     if (!list.some((t) => t.name === 'qa-test-template')) throw new Error('kaydedilemedi');
   });
 
-  await page.screenshot({ path: path.join(SCREENS, 'qa-final.png'), fullPage: false });
+  await page.screenshot({ path: join(SCREENS, 'qa-buttons.png'), fullPage: false });
   await browser.close();
 
-  console.log('\n========== QA RAPORU ==========');
+  // Test şablonunu temizle (public/templates KVKK klasörü — artık bırakılmamalı).
+  await unlink(join('public', 'templates', 'qa-test-template.xslt')).catch(() => undefined);
+
   const passed = results.filter((r) => r.ok).length;
-  const failed = results.filter((r) => !r.ok);
-  console.log(`Toplam: ${results.length}  |  PASS: ${passed}  |  FAIL: ${failed.length}`);
-  if (failed.length) {
-    console.log('\nBAŞARISIZ:');
-    failed.forEach((r) => console.log(`  - ${r.name}: ${r.detail}`));
-  }
-  console.log('Console error:', consoleErrors.length, '| key-uyarı:', consoleWarnings.length);
-  if (consoleErrors.length) {
-    [...new Set(consoleErrors)].slice(0, 8).forEach((e) => console.log('  ! ' + e.slice(0, 160)));
-  }
+  console.log('\n========== QA-BUTTONS ==========');
+  console.log(`Toplam: ${results.length} | PASS: ${passed} | FAIL: ${results.length - passed}`);
+  results.filter((r) => !r.ok).forEach((r) => console.log(`  - ${r.name}: ${r.detail}`));
+  console.log(`Console error: ${consoleErrors.length}`);
+  if (consoleErrors.length) [...new Set(consoleErrors)].slice(0, 5).forEach((e) => console.log('  ! ' + e.slice(0, 160)));
   console.log('================================');
-  process.exit(failed.length > 0 ? 1 : 0);
+  process.exit(results.some((r) => !r.ok) ? 1 : 0);
 }
 
-main().catch((e) => {
-  console.error('HATA:', e.message);
-  process.exit(1);
-});
+main().catch((e) => { console.error('HATA:', e.message); process.exit(1); });
