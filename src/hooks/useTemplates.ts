@@ -1,77 +1,51 @@
-import { useEffect, useCallback } from 'react';
-import { useEditorStore } from '../store/editorStore';
-import type { CustomTemplate } from '../store/editorStore';
+// Template-loading helpers extracted from App.tsx to keep the main component
+// focused on orchestration. Pure functions over the content setters + the
+// current XML document, so behaviour is identical to the inlined version.
+import { useCallback } from 'react';
+import { DEFAULT_XML, DEFAULT_DESPATCH_XML, DEFAULT_XSLT } from '../samples/invoiceSample';
 
-export function useTemplates() {
-  const {
-    customTemplates,
-    setCustomTemplates,
-    setIsSavingTemplate,
-    setSaveTemplateName,
-    saveTemplateName,
-  } = useEditorStore();
+export interface UseTemplatesApi {
+  loadDefaultSample: () => void;
+  getMatchingSampleXml: (xslt: string) => string;
+  loadTemplateWithSampleXml: (xslt: string) => void;
+}
 
-  const loadTemplates = useCallback(async () => {
-    try {
-      const res = await fetch('/api/list-templates');
-      if (res.ok) {
-        const data = await res.json();
-        setCustomTemplates(data);
-      }
-    } catch (err) {
-      console.error('Failed to load templates:', err);
+export function useTemplates(
+  xmlContent: string,
+  updateXmlContent: (xml: string) => void,
+  updateXsltContent: (xslt: string) => void,
+  setErrorMsg: (msg: string | undefined) => void,
+): UseTemplatesApi {
+  const loadDefaultSample = useCallback(() => {
+    updateXmlContent(DEFAULT_XML);
+    updateXsltContent(DEFAULT_XSLT);
+    setErrorMsg(undefined);
+  }, [updateXmlContent, updateXsltContent, setErrorMsg]);
+
+  const getMatchingSampleXml = useCallback((xslt: string): string => {
+    if (!xslt) return DEFAULT_XML;
+    const checks = [
+      /DespatchAdvice/i,
+      /DespatchLine/i,
+      /DespatchSupplierParty/i,
+      /ActualDespatchDate/i,
+    ];
+    if (checks.some((re) => re.test(xslt))) {
+      return DEFAULT_DESPATCH_XML;
     }
-  }, [setCustomTemplates]);
-
-  const saveTemplate = useCallback(
-    async (xsltContent: string): Promise<boolean> => {
-      if (!saveTemplateName.trim()) {
-        console.warn('Template name is empty');
-        return false;
-      }
-
-      setIsSavingTemplate(true);
-      try {
-        const res = await fetch('/api/save-template', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: saveTemplateName,
-            content: xsltContent,
-          }),
-        });
-
-        if (res.ok) {
-          setSaveTemplateName('');
-          await loadTemplates();
-          return true;
-        } else {
-          const error = await res.text();
-          console.error('Save template error:', error);
-          return false;
-        }
-      } catch (err) {
-        console.error('Save template error:', err);
-        return false;
-      } finally {
-        setIsSavingTemplate(false);
-      }
-    },
-    [saveTemplateName, setIsSavingTemplate, setSaveTemplateName, loadTemplates]
-  );
-
-  const loadTemplate = useCallback((template: CustomTemplate) => {
-    return template.content;
+    return DEFAULT_XML;
   }, []);
 
-  useEffect(() => {
-    loadTemplates();
-  }, [loadTemplates]);
+  const loadTemplateWithSampleXml = useCallback((xslt: string) => {
+    const currentXml = xmlContent || '';
+    const isDespatchTemplate = /DespatchAdvice|DespatchLine|DespatchSupplierParty|ActualDespatchDate/i.test(xslt);
+    const xmlHasDespatch = currentXml.includes('DespatchAdvice') || currentXml.includes('DespatchLine');
+    const typeMatches = (isDespatchTemplate && xmlHasDespatch) || (!isDespatchTemplate && !xmlHasDespatch);
+    if (!currentXml.trim() || !typeMatches) {
+      updateXmlContent(getMatchingSampleXml(xslt));
+    }
+    updateXsltContent(xslt);
+  }, [xmlContent, updateXmlContent, updateXsltContent, getMatchingSampleXml]);
 
-  return {
-    customTemplates,
-    saveTemplate,
-    loadTemplate,
-    loadTemplates,
-  };
+  return { loadDefaultSample, getMatchingSampleXml, loadTemplateWithSampleXml };
 }

@@ -185,7 +185,7 @@ function App() {
         const src = el.getAttribute('src')
         const srcNote = src ? (src.startsWith('data:') ? 'görsel' : src.slice(0, 28)) : 'boş'
         const label = text
-          ? `${tag} · ${text.slice(0, 48)}${text.length > 48 ? '…' : ''}`
+          ? `${tag} · ${text.slice(0, 48)}${text.length > 48 ? 'â€¦' : ''}`
           : `${tag} · ${srcNote}`
         list.push({ id, label })
       })
@@ -733,7 +733,7 @@ function App() {
             </style>
           </head>
           <body>
-            <h3>⚠️ Tasarım Dönüştürme Hatası</h3>
+            <h3>âš ï¸ Tasarım Dönüştürme Hatası</h3>
             <p>XML ve XSLT eşleştirilirken bir hata oluştu:</p>
             <pre>${errorMsg.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
           </body>
@@ -2012,9 +2012,6 @@ function App() {
     setErrorMsg(undefined)
   }
 
-  // Detect the XML document type expected by a given XSLT template.
-  // Irsaliye (DespatchAdvice) templates need DespatchAdvice sample XML,
-  // invoice/archive templates need Invoice sample XML.
   const getMatchingSampleXml = (xslt: string): string => {
     if (!xslt) return DEFAULT_XML
     const checks = [
@@ -2029,9 +2026,6 @@ function App() {
     return DEFAULT_XML
   }
 
-  // Load a template and auto-fill the XML editor with the matching sample data.
-  // The XML is only replaced when it is empty or its type does not match the
-  // template, so an already-loaded matching document is never clobbered.
   const loadTemplateWithSampleXml = (xslt: string) => {
     const currentXml = xmlContent || ''
     const isDespatchTemplate = /DespatchAdvice|DespatchLine|DespatchSupplierParty|ActualDespatchDate/i.test(xslt)
@@ -2636,7 +2630,7 @@ function App() {
                 <FileCode className="h-3.5 w-3.5 text-blue-400" />
                 XML Verisi
                 {validationStatus.xmlValid ? (
-                  <span className="text-[9px] text-emerald-400 ml-1">✓ Geçerli</span>
+                  <span className="text-[9px] text-emerald-400 ml-1">âœ“ Geçerli</span>
                 ) : (
                   <>
                     <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping ml-1" />
@@ -2658,7 +2652,7 @@ function App() {
                 <FileCode className="h-3.5 w-3.5 text-purple-400" />
                 XSLT Tasarımı
                 {validationStatus.xsltValid ? (
-                  <span className="text-[9px] text-emerald-400 ml-1">✓ Geçerli</span>
+                  <span className="text-[9px] text-emerald-400 ml-1">âœ“ Geçerli</span>
                 ) : (
                   <>
                     <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping ml-1" />
@@ -2793,7 +2787,7 @@ function App() {
                         type="text"
                         value={elementPickerFilter}
                         onChange={(e) => setElementPickerFilter(e.target.value)}
-                        placeholder="Ara: başlık, hücre metni, td, h1…"
+                        placeholder="Ara: başlık, hücre metni, td, h1â€¦"
                         className="w-full py-1.5 px-2 bg-slate-900 border border-slate-700 focus:border-indigo-500/60 text-xs text-slate-300 rounded-lg outline-none"
                       />
                       <div className="max-h-44 overflow-y-auto scrollbar-thin rounded-lg border border-slate-800 bg-slate-950/40">
@@ -3075,7 +3069,7 @@ function App() {
                                 }`}
                                 title="Metnin alt satıra geçmesini engeller ve tek satırda tutar."
                               >
-                                {styleWhiteSpace === 'nowrap' ? '✓ Tek Satırda Tut (Nowrap)' : 'Normal (Kayabilir)'}
+                                {styleWhiteSpace === 'nowrap' ? 'âœ“ Tek Satırda Tut (Nowrap)' : 'Normal (Kayabilir)'}
                               </button>
                               <span className="text-[9px] text-slate-500 leading-tight">
                                 Boşluk, tire (-) veya slaş (/) içeren metinlerin alta kaymasını önlemek için 'Tek Satırda Tut' butonunu aktif edin.
@@ -3448,7 +3442,7 @@ function App() {
                 )}
 
                 <div className="mt-4 pt-4 border-t border-slate-900 text-xs text-slate-500 flex items-center justify-between">
-                  <span>💡 İpucu: Önizlemedeki herhangi bir yazıya <b>çift tıklayarak</b> içeriğini doğrudan değiştirebilirsiniz.</span>
+                  <span>ğŸ’¡ İpucu: Önizlemedeki herhangi bir yazıya <b>çift tıklayarak</b> içeriğini doğrudan değiştirebilirsiniz.</span>
                   <span>Düzenlenen Selector: {selectedSelector || 'Yok'}</span>
                 </div>
 
@@ -3612,12 +3606,12 @@ function App() {
                     <span className="flex items-center gap-1 text-slate-500 font-medium shrink-0">
                       <Compass className="h-3 w-3" /> Hızlı Git:
                     </span>
-                    <button onClick={() => quickJumpTo('css')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-indigo-400 border border-slate-800 hover:border-indigo-500/20 transition cursor-pointer">🎨 CSS Stilleri</button>
-                    <button onClick={() => quickJumpTo('supplier')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-blue-400 border border-slate-800 hover:border-blue-500/20 transition cursor-pointer">🏢 Satıcı Bilgisi</button>
-                    <button onClick={() => quickJumpTo('customer')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-purple-400 border border-slate-800 hover:border-purple-500/20 transition cursor-pointer">👤 Alıcı Bilgisi</button>
-                    <button onClick={() => quickJumpTo('title')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-800 hover:border-cyan-500/20 transition cursor-pointer">📝 Fatura No</button>
-                    <button onClick={() => quickJumpTo('items')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-405 border border-slate-800 hover:border-amber-500/20 transition cursor-pointer">🛒 Ürün Tablosu</button>
-                    <button onClick={() => quickJumpTo('totals')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 hover:border-emerald-500/20 transition cursor-pointer">📊 Toplamlar</button>
+                    <button onClick={() => quickJumpTo('css')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-indigo-400 border border-slate-800 hover:border-indigo-500/20 transition cursor-pointer">ğŸ¨ CSS Stilleri</button>
+                    <button onClick={() => quickJumpTo('supplier')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-blue-400 border border-slate-800 hover:border-blue-500/20 transition cursor-pointer">ğŸ¢ Satıcı Bilgisi</button>
+                    <button onClick={() => quickJumpTo('customer')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-purple-400 border border-slate-800 hover:border-purple-500/20 transition cursor-pointer">ğŸ‘¤ Alıcı Bilgisi</button>
+                    <button onClick={() => quickJumpTo('title')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-800 hover:border-cyan-500/20 transition cursor-pointer">ğŸ“ Fatura No</button>
+                    <button onClick={() => quickJumpTo('items')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-405 border border-slate-800 hover:border-amber-500/20 transition cursor-pointer">ğŸ›’ Ürün Tablosu</button>
+                    <button onClick={() => quickJumpTo('totals')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 hover:border-emerald-500/20 transition cursor-pointer">ğŸ“Š Toplamlar</button>
                   </div>
                 )}
 
@@ -3831,12 +3825,12 @@ function App() {
                   {/* Quick navigation row for split layout */}
                   <div className="bg-slate-950 border-b border-slate-900 px-4 py-1 flex items-center gap-1.5 text-[9px] text-slate-400 overflow-x-auto shrink-0 scrollbar-none">
                     <span className="text-slate-500 font-medium shrink-0">Hızlı Git:</span>
-                    <button onClick={() => quickJumpTo('css')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-indigo-400 border border-slate-800 hover:border-indigo-500/20 transition cursor-pointer">🎨 CSS</button>
-                    <button onClick={() => quickJumpTo('supplier')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-blue-400 border border-slate-800 hover:border-blue-500/20 transition cursor-pointer">🏢 Satıcı</button>
-                    <button onClick={() => quickJumpTo('customer')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-purple-400 border border-slate-800 hover:border-purple-500/20 transition cursor-pointer">👤 Alıcı</button>
-                    <button onClick={() => quickJumpTo('title')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-800 hover:border-cyan-500/20 transition cursor-pointer">📝 Fatura No</button>
-                    <button onClick={() => quickJumpTo('items')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-amber-400 border border-slate-800 hover:border-amber-500/20 transition cursor-pointer">🛒 Ürünler</button>
-                    <button onClick={() => quickJumpTo('totals')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 hover:border-emerald-500/20 transition cursor-pointer">📊 Toplamlar</button>
+                    <button onClick={() => quickJumpTo('css')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-indigo-400 border border-slate-800 hover:border-indigo-500/20 transition cursor-pointer">ğŸ¨ CSS</button>
+                    <button onClick={() => quickJumpTo('supplier')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-blue-400 border border-slate-800 hover:border-blue-500/20 transition cursor-pointer">ğŸ¢ Satıcı</button>
+                    <button onClick={() => quickJumpTo('customer')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-purple-400 border border-slate-800 hover:border-purple-500/20 transition cursor-pointer">ğŸ‘¤ Alıcı</button>
+                    <button onClick={() => quickJumpTo('title')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-800 hover:border-cyan-500/20 transition cursor-pointer">ğŸ“ Fatura No</button>
+                    <button onClick={() => quickJumpTo('items')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-amber-400 border border-slate-800 hover:border-amber-500/20 transition cursor-pointer">ğŸ›’ Ürünler</button>
+                    <button onClick={() => quickJumpTo('totals')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 hover:border-emerald-500/20 transition cursor-pointer">ğŸ“Š Toplamlar</button>
                   </div>
 
                   {/* XSLT Validation Overlay */}
@@ -3931,7 +3925,7 @@ function App() {
                 } ${errorMsg ? 'text-rose-400' : ''}`}
               >
                 <Info className="h-3.5 w-3.5 text-amber-400" />
-                Sistem Raporu {errorMsg && '⚠️'}
+                Sistem Raporu {errorMsg && 'âš ï¸'}
               </button>
             </div>
 

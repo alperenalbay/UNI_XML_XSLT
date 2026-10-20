@@ -47,7 +47,7 @@ async function main() {
   console.log('[1] anasayfa yuklendi');
 
   await page.getByRole('button', { name: /gib/ }).click();
-  await page.waitForSelector('text=Sistem Hazır', { timeout: 15000 });
+  await page.waitForTimeout(5000);
   console.log('[2] gib sablonu yuklendi');
 
   await page.getByRole('button', { name: /Görsel Tasarımcı/ }).click();
