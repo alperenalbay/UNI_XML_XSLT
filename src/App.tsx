@@ -38,7 +38,6 @@ import {
   transformXmlWithXslt, 
   extractEmbeddedXslt, 
   removeEmbeddedXslt,
-  updateXsltStyle,
   getXsltStyleValue,
   updateXsltText,
   updateElementTextInXsltById,
@@ -64,7 +63,7 @@ import { detectSheetSize, mmToPx } from './utils/sheetSize'
 import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 import { ToastContainer, useToast, WatermarkPanel } from './components'
 import { useEditorStore } from './store/editorStore'
-import { useFileOps, useTemplates, useElementOps } from './hooks'
+import { useFileOps, useTemplates, useElementOps, useStyleOps } from './hooks'
 
 
 function App() {
@@ -1809,45 +1808,26 @@ function App() {
   }
 
   // Handle WYSIWYG style edits from inputs
-  const handleStyleChange = (property: string, value: string) => {
-    if (!selectedSelector && !selectedElementDetails?.xsltId) return
-    
-    // Local state sync
-    if (property === 'margin') setStyleMargin(value)
-    else if (property === 'padding') setStylePadding(value)
-    else if (property === 'font-size') setStyleFontSize(value)
-    else if (property === 'color') setStyleColor(value)
-    else if (property === 'width') setStyleWidth(value)
-    else if (property === 'text-align') setStyleTextAlign(value)
-    else if (property === 'font-weight') setStyleFontWeight(value)
-    else if (property === 'font-style') setStyleFontStyle(value)
-    else if (property === 'text-decoration') setStyleTextDecoration(value)
-    else if (property === 'white-space') setStyleWhiteSpace(value)
-    
-    // Write style changes back into Monaco editor (Prefer direct line text update, fallback to element ID inline style, fallback to style block)
-    let updated = xsltContent
-    const isWidth = property.toLowerCase() === 'width';
-    const colXsltId = selectedElementDetails?.colXsltId;
-    const targetId = (isWidth && colXsltId) ? colXsltId : selectedElementDetails?.xsltId;
-    
-    let targetLine = selectedLineNumber;
-    if (isWidth && colXsltId) {
-      const colLine = findLineByXsltId(xsltContent, colXsltId);
-      if (colLine > 0) targetLine = colLine;
-    }
-
-    if (targetLine > 0) {
-      updated = updateXsltTagAtLine(xsltContent, targetLine, property, value)
-    } else if (targetId) {
-      updated = updateElementStyleInXsltById(xsltContent, targetId, property, value)
-    } else if (selectedSelector) {
-      updated = updateXsltStyle(xsltContent, selectedSelector, property, value)
-    }
-
-    if (updated !== xsltContent) {
-      updateXsltContent(updated)
-    }
+  const styleSetters = {
+    setStyleMargin,
+    setStylePadding,
+    setStyleFontSize,
+    setStyleColor,
+    setStyleWidth,
+    setStyleTextAlign,
+    setStyleFontWeight,
+    setStyleFontStyle,
+    setStyleTextDecoration,
+    setStyleWhiteSpace,
   }
+  const { handleStyleChange } = useStyleOps(
+    xsltContent,
+    selectedSelector,
+    selectedElementDetails,
+    selectedLineNumber,
+    updateXsltContent,
+    styleSetters
+  )
 
 
 
