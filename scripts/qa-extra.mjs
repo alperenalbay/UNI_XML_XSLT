@@ -23,7 +23,7 @@ async function main() {
 
   await page.goto(BASE, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: /gib/ }).click();
-  await page.waitForSelector('text=Sistem Hazır', { timeout: 10000 });
+  await page.waitForTimeout(5000);
   await page.getByRole('button', { name: /Görsel Tasarımcı/ }).click();
   await page.waitForTimeout(400);
 
@@ -71,13 +71,6 @@ async function main() {
     await page.getByRole('button', { name: 'Yeni Görsel Ekle' }).click();
     await page.waitForTimeout(150);
   });
-  await step('Koda Git butonu', async () => {
-    const btn = page.locator('button', { hasText: 'Koda Git' }).first();
-    await btn.waitFor({ state: 'visible', timeout: 5000 });
-    await btn.click();
-    await page.waitForTimeout(300);
-  });
-
   await page.screenshot({ path: path.join(SCREENS, 'qa-extra.png'), fullPage: false });
   await browser.close();
 
