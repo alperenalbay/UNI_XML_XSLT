@@ -2229,12 +2229,12 @@ function App() {
                     <span className="flex items-center gap-1 text-slate-500 font-medium shrink-0">
                       <Compass className="h-3 w-3" /> Hızlı Git:
                     </span>
-                    <button onClick={() => quickJumpTo('css')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-indigo-400 border border-slate-800 hover:border-indigo-500/20 transition cursor-pointer">ğŸ¨ CSS Stilleri</button>
-                    <button onClick={() => quickJumpTo('supplier')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-blue-400 border border-slate-800 hover:border-blue-500/20 transition cursor-pointer">ğŸ¢ Satıcı Bilgisi</button>
-                    <button onClick={() => quickJumpTo('customer')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-purple-400 border border-slate-800 hover:border-purple-500/20 transition cursor-pointer">ğŸ‘¤ Alıcı Bilgisi</button>
-                    <button onClick={() => quickJumpTo('title')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-800 hover:border-cyan-500/20 transition cursor-pointer">ğŸ“ Fatura No</button>
-                    <button onClick={() => quickJumpTo('items')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-405 border border-slate-800 hover:border-amber-500/20 transition cursor-pointer">ğŸ›’ Ürün Tablosu</button>
-                    <button onClick={() => quickJumpTo('totals')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 hover:border-emerald-500/20 transition cursor-pointer">ğŸ“Š Toplamlar</button>
+                    <button onClick={() => quickJumpTo('css')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-indigo-400 border border-slate-800 hover:border-indigo-500/20 transition cursor-pointer">🎨 CSS Stilleri</button>
+                    <button onClick={() => quickJumpTo('supplier')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-blue-400 border border-slate-800 hover:border-blue-500/20 transition cursor-pointer">🏢 Satıcı Bilgisi</button>
+                    <button onClick={() => quickJumpTo('customer')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-purple-400 border border-slate-800 hover:border-purple-500/20 transition cursor-pointer">👤 Alıcı Bilgisi</button>
+                    <button onClick={() => quickJumpTo('title')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-800 hover:border-cyan-500/20 transition cursor-pointer">📝 Fatura No</button>
+                    <button onClick={() => quickJumpTo('items')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-405 border border-slate-800 hover:border-amber-500/20 transition cursor-pointer">🛒 Ürün Tablosu</button>
+                    <button onClick={() => quickJumpTo('totals')} className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 hover:border-emerald-500/20 transition cursor-pointer">📰 Toplamlar</button>
                   </div>
                 )}
 
@@ -2448,12 +2448,12 @@ function App() {
                   {/* Quick navigation row for split layout */}
                   <div className="bg-slate-950 border-b border-slate-900 px-4 py-1 flex items-center gap-1.5 text-[9px] text-slate-400 overflow-x-auto shrink-0 scrollbar-none">
                     <span className="text-slate-500 font-medium shrink-0">Hızlı Git:</span>
-                    <button onClick={() => quickJumpTo('css')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-indigo-400 border border-slate-800 hover:border-indigo-500/20 transition cursor-pointer">ğŸ¨ CSS</button>
-                    <button onClick={() => quickJumpTo('supplier')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-blue-400 border border-slate-800 hover:border-blue-500/20 transition cursor-pointer">ğŸ¢ Satıcı</button>
-                    <button onClick={() => quickJumpTo('customer')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-purple-400 border border-slate-800 hover:border-purple-500/20 transition cursor-pointer">ğŸ‘¤ Alıcı</button>
-                    <button onClick={() => quickJumpTo('title')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-800 hover:border-cyan-500/20 transition cursor-pointer">ğŸ“ Fatura No</button>
-                    <button onClick={() => quickJumpTo('items')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-amber-400 border border-slate-800 hover:border-amber-500/20 transition cursor-pointer">ğŸ›’ Ürünler</button>
-                    <button onClick={() => quickJumpTo('totals')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 hover:border-emerald-500/20 transition cursor-pointer">ğŸ“Š Toplamlar</button>
+                    <button onClick={() => quickJumpTo('css')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-indigo-400 border border-slate-800 hover:border-indigo-500/20 transition cursor-pointer">🎨 CSS</button>
+                    <button onClick={() => quickJumpTo('supplier')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-blue-400 border border-slate-800 hover:border-blue-500/20 transition cursor-pointer">🏢 Satıcı</button>
+                    <button onClick={() => quickJumpTo('customer')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-purple-400 border border-slate-800 hover:border-purple-500/20 transition cursor-pointer">👤 Alıcı</button>
+                    <button onClick={() => quickJumpTo('title')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-800 hover:border-cyan-500/20 transition cursor-pointer">📝 Fatura No</button>
+                    <button onClick={() => quickJumpTo('items')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-amber-400 border border-slate-800 hover:border-amber-500/20 transition cursor-pointer">🛒 Ürünler</button>
+                    <button onClick={() => quickJumpTo('totals')} className="px-1.5 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 hover:border-emerald-500/20 transition cursor-pointer">📰 Toplamlar</button>
                   </div>
 
                   {/* XSLT Validation Overlay */}
