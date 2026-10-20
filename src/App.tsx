@@ -50,6 +50,7 @@ import { usePreviewDocument } from './hooks/usePreviewDocument'
 import { usePreviewIframe } from './hooks/usePreviewIframe'
 import { useAppUpdate } from './hooks/useAppUpdate'
 import { useImageManager } from './hooks/useImageManager'
+import { useTemplateLibrary } from './hooks/useTemplateLibrary'
 import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 import { ToastContainer, useToast, WatermarkPanel } from './components'
 import { useEditorStore } from './store/editorStore'
@@ -95,6 +96,17 @@ function App() {
     watermarkOpacity,
     watermarkRotation
   } = useEditorStore();
+
+  // Template library: list + save the current design as a new template.
+  const { loadCustomTemplates, handleSaveCurrentAsTemplate } = useTemplateLibrary(
+    xsltContent,
+    saveTemplateName,
+    setSaveTemplateName,
+    setIsSavingTemplate,
+    setCustomTemplates,
+    setInspectorStatus,
+    addToast,
+  )
 
   const previewLayout = 'A4';
   // Sandbox SABİTTİR (bkz. src/utils/previewScripts.ts). Değişken olması,
@@ -209,55 +221,6 @@ function App() {
 
   // Image management state
 
-  const templatesToastShown = useRef(false);
-  const templatesLoading = useRef(false);
-
-  const loadCustomTemplates = useCallback(async (opts?: { silent?: boolean }) => {
-    // StrictMode çift-effect ve hızlı sekme geçişlerinde aynı anda
-    // birden fazla fetch yarışmasın; biri abort olup sahte hata verir.
-    if (templatesLoading.current) return;
-    templatesLoading.current = true;
-    const silent = opts?.silent ?? false;
-    try {
-      const res = await fetch('/api/list-templates')
-      if (res.ok) {
-        const data = await res.json()
-        setCustomTemplates(data)
-        // Başarı toast'ı yalnızca ilk yüklemede gösterilir; sonraki
-        // arka plan yenilemeleri (sekme ziyareti, kayıt sonrası) sessizdir.
-        if (!templatesToastShown.current) {
-          templatesToastShown.current = true
-          if (!silent) {
-            addToast({
-              type: 'success',
-              message: 'Şablonlar Yüklendi',
-              description: `${data.length} şablon bulundu`
-            })
-          }
-        }
-      } else if (!silent) {
-        addToast({
-          type: 'warning',
-          message: 'Şablon Yükleme Başarısız',
-          description: 'Şablonlar yüklenemedi'
-        })
-      }
-    } catch (err) {
-      console.error('Failed to load custom templates:', err)
-      // Ekranda gösterilecek kayıtlı liste varken sessiz geçiştir;
-      // liste boşsa gerçek bir hata vardır, toast göster.
-      const hasCached = useEditorStore.getState().customTemplates.length > 0
-      if (!silent || !hasCached) {
-        addToast({
-          type: 'error',
-          message: 'Şablon Hatası',
-          description: 'Şablonlar yüklenirken hata oluştu'
-        })
-      }
-    } finally {
-      templatesLoading.current = false;
-    }
-  }, [setCustomTemplates, addToast])
 
   // Load custom templates on mount
   useEffect(() => {
@@ -678,40 +641,6 @@ function App() {
     setSelectedLineNumber
   )
 
-  const handleSaveCurrentAsTemplate = async (nameOverride?: string) => {
-    const name = (nameOverride || saveTemplateName).trim()
-    if (!name) {
-      alert('Lütfen şablon için geçerli bir isim girin.')
-      return
-    }
-    setSaveTemplateName(name)
-    setIsSavingTemplate(true)
-    try {
-      const res = await fetch('/api/save-template', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name,
-          content: xsltContent
-        })
-      })
-      if (res.ok) {
-        setInspectorStatus(`"${name}" şablonu başarıyla kaydedildi.`)
-        setTimeout(() => setInspectorStatus(null), 3000)
-        setSaveTemplateName('')
-        await loadCustomTemplates({ silent: true })
-      } else {
-        alert('Şablon kaydedilirken sunucu hatası oluştu.')
-      }
-    } catch (err) {
-      console.error(err)
-      alert('Şablon kaydedilemedi. Sunucu hatası.')
-    } finally {
-      setIsSavingTemplate(false)
-    }
-  }
 
   const { handleEditTextElement } = useInlineTextEdit(
     iframeRef,
