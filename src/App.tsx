@@ -38,12 +38,7 @@ import {
   transformXmlWithXslt, 
   extractEmbeddedXslt, 
   removeEmbeddedXslt,
-  getXsltStyleValue,
-  updateXsltText,
   updateElementTextInXsltById,
-  updateElementStyleInXsltById,
-  updateXsltTagAtLine,
-  findLineByXsltId,
   extractAllImagesFromXslt,
   replaceImageInXslt,
   addImageToXslt,
@@ -57,11 +52,12 @@ import {
   stripTemplateScripts,
   countTemplateScripts,
   buildScriptDisabledNotice,
-  isTrustedPreviewMessage,
 } from './utils/previewScripts'
 import { detectSheetSize, mmToPx } from './utils/sheetSize'
 import { COLUMN_RESIZE_SCRIPT } from './utils/columnResizeScript'
 import { IMAGE_DRAG_SCRIPT } from './utils/imageDragScript'
+import { findLineInCode } from './utils/xsltCodeSearch'
+import { useInspectorMessages } from './hooks/useInspectorMessages'
 import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 import { ToastContainer, useToast, WatermarkPanel } from './components'
 import { useEditorStore } from './store/editorStore'
@@ -1202,89 +1198,6 @@ function App() {
 
 
 
-  // Heuristic Search and Jump in XSLT code editor
-  const findLineInCode = (code: string, searchTerms: string[]): number => {
-    const lines = code.split('\n')
-    
-    // Helper to check if a line matches a term
-    const matchesTerm = (lineContent: string, term: string): boolean => {
-      const trimmedTerm = term.trim()
-      if (!trimmedTerm) return false
-      
-      // 1. If term represents a class (e.g. .company-name or class="company-name" or class='company-name')
-      let className = ''
-      if (trimmedTerm.startsWith('.')) {
-        className = trimmedTerm.substring(1)
-      } else if (trimmedTerm.startsWith('class="') && trimmedTerm.endsWith('"')) {
-        className = trimmedTerm.substring(7, trimmedTerm.length - 1)
-      } else if (trimmedTerm.startsWith("class='") && trimmedTerm.endsWith("'")) {
-        className = trimmedTerm.substring(7, trimmedTerm.length - 1)
-      }
-      
-      if (className) {
-        // Find class="value" or class='value'
-        const regex = /class\s*=\s*['"]([^'"]*)['"]/gi
-        let match;
-        regex.lastIndex = 0;
-        while ((match = regex.exec(lineContent)) !== null) {
-          const classValue = match[1] || ''
-          const classes = classValue.split(/\s+/).map(c => c.trim()).filter(Boolean)
-          if (classes.includes(className)) {
-            return true
-          }
-        }
-        return false
-      }
-      
-      // 2. If term represents an ID (e.g. #logo or id="logo" or id='logo')
-      let idName = ''
-      if (trimmedTerm.startsWith('#')) {
-        idName = trimmedTerm.substring(1)
-      } else if (trimmedTerm.startsWith('id="') && trimmedTerm.endsWith('"')) {
-        idName = trimmedTerm.substring(4, trimmedTerm.length - 1)
-      } else if (trimmedTerm.startsWith("id='") && trimmedTerm.endsWith("'")) {
-        idName = trimmedTerm.substring(4, trimmedTerm.length - 1)
-      }
-      
-      if (idName) {
-        const regex = /id\s*=\s*['"]([^'"]*)['"]/gi
-        let match;
-        regex.lastIndex = 0;
-        while ((match = regex.exec(lineContent)) !== null) {
-          const idValue = (match[1] || '').trim()
-          if (idValue === idName) {
-            return true
-          }
-        }
-        return false
-      }
-      
-      // 3. Default exact case-sensitive matching
-      return lineContent.includes(term)
-    }
-
-    // 1. First pass: try matching each term (highest priority first)
-    for (const term of searchTerms) {
-      for (let i = 0; i < lines.length; i++) {
-        if (matchesTerm(lines[i], term)) {
-          return i + 1
-        }
-      }
-    }
-    
-    // 2. Second pass: case-insensitive fallback (for standard terms)
-    for (const term of searchTerms) {
-      const lower = term.toLowerCase()
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].toLowerCase().includes(lower)) {
-          return i + 1
-        }
-      }
-    }
-    
-    return 1
-  }
-
   const jumpToXsltLine = useCallback((line: number) => {
     setEditorActiveTab('xslt')
     setTimeout(() => {
@@ -1296,239 +1209,45 @@ function App() {
     }, 50)
   }, [setEditorActiveTab])
 
-  // Handle messages from the iframe (Text edits and selector clicks)
-  useEffect(() => {
-    const handleInspectorMessage = (event: MessageEvent) => {
-      if (!event.data) return
+  // Silent scroll in the XSLT editor (does NOT switch tabs) — used by the
+  // designer when an element is selected in the preview.
+  const revealXsltLine = useCallback((line: number) => {
+    if (!xsltEditorRef.current) return
+    xsltEditorRef.current.revealLineInCenter(line)
+    xsltEditorRef.current.setPosition({ lineNumber: line, column: 1 })
+  }, [])
 
-      // GÜVENLİK: Bu kanaldan gelen mesajlar XSLT kodunu doğrudan değiştiriyor
-      // (xslt-text-edit, xslt-column-resized, görsel sürükle-bırak...), bu
-      // yüzden origin doğrulanır. `event.source === iframe.contentWindow`
-      // kontrolü srcDoc+sandbox iframe'lerde güvenilir DEĞİL (bkz.
-      // utils/previewScripts.ts) ve kullanılmamalıdır.
-      if (!isTrustedPreviewMessage(event.origin, window.location.origin)) return;
+  // Handle messages from the iframe (text edits, selector clicks, drag & drop)
+  useInspectorMessages(
+    {
+      xsltContent,
+      designerImages,
+      selectedElementDetails,
+      updateXsltContent,
+      setIframeLogs,
+      setInspectorStatus,
+      setPendingTransforms,
+      setSelectedElementDetails,
+      setSelectedSelector,
+      setSelectedElementName,
+      setSelectedLineNumber,
+      setStyleMargin,
+      setStylePadding,
+      setStyleFontSize,
+      setStyleColor,
+      setStyleWidth,
+      setStyleTextAlign,
+      setStyleFontWeight,
+      setStyleFontStyle,
+      setStyleTextDecoration,
+      setStyleWhiteSpace,
+      setWidthUnit,
+      jumpToXsltLine,
+      revealXsltLine,
+    },
+    { findLineInCode },
+  )
 
-      const { source, text, className, tagName, id, original, current, targetTagName, targetSrc, targetHref, xsltId, imageIndex, isQrCode, colXsltId, colWidth, cellXsltId, tableXsltId, styles, message, lineno, colno, args } = event.data
-
-      if (source === 'iframe-error') {
-        const errStr = `[Hata] ${message} (${lineno}:${colno})`;
-        setIframeLogs(prev => [...prev, errStr]);
-        return;
-      }
-
-      if (source === 'iframe-console-error') {
-        const errStr = `[Konsol Hatası] ${args.join(' ')}`;
-        setIframeLogs(prev => [...prev, errStr]);
-        return;
-      }
-
-      // Case 0: Column resized via drag & drop in iframe preview
-      if (source === 'xslt-column-resized') {
-        const { xsltId: resizedId, xsltIds, widthPct } = event.data;
-        if (resizedId && widthPct) {
-          if (selectedElementDetails?.xsltId === resizedId) {
-            setStyleWidth(widthPct);
-            setWidthUnit('%');
-          }
-          let updated = xsltContent;
-          const idsToUpdate = xsltIds && xsltIds.length > 0 ? xsltIds : [resizedId];
-          idsToUpdate.forEach((id: string) => {
-            const line = findLineByXsltId(updated, id);
-            if (line > 0) {
-              updated = updateXsltTagAtLine(updated, line, 'width', widthPct);
-            } else {
-              updated = updateElementStyleInXsltById(updated, id, 'width', widthPct);
-            }
-          });
-          if (updated !== xsltContent) {
-            updateXsltContent(updated);
-            setInspectorStatus(`Sütun genişliği ayarlandı: ${widthPct}`);
-            setTimeout(() => setInspectorStatus(null), 3000);
-          }
-        }
-        return;
-      }
-
-      // Case: Image drag from Görsel Düzenleyici - only track pending, don't save yet
-      if (source === 'xslt-image-drag') {
-        const { imgSrc: dragSrc, imageIndex, x: newX, y: newY } = event.data;
-        let key = dragSrc;
-        if (typeof dragSrc === 'string' && dragSrc.startsWith('__qr__:')) {
-          key = dragSrc;
-        }
-        if (imageIndex >= 0 && imageIndex < designerImages.length && designerImages[imageIndex].src) {
-          key = designerImages[imageIndex].src;
-        }
-        if (key) {
-          console.log('[handleInspectorMessage] xslt-image-drag received', { dragSrc: dragSrc?.substring(0,60), imageIndex, resolvedKey: key?.substring(0,60), x: newX, y: newY });
-          setPendingTransforms(prev => ({ ...prev, [key]: { x: newX, y: newY } }));
-        }
-        return;
-      }
-
-      // Case 1: In-place text modifications (Double clicked leaf texts)
-      if (source === 'xslt-text-edit') {
-        let updated = xsltContent
-        if (xsltId) {
-          updated = updateElementTextInXsltById(xsltContent, xsltId, current)
-        } else {
-          updated = updateXsltText(xsltContent, original, current)
-        }
-        
-        if (updated !== xsltContent) {
-          updateXsltContent(updated)
-          setInspectorStatus(`Metin güncellendi: "${original.substring(0, 10)}..." ➜ "${current.substring(0, 15)}..."`)
-          setTimeout(() => setInspectorStatus(null), 3000)
-        } 
-      }
-      
-      // Case 2: Click in Inspector mode (navigates code)
-      else if (source === 'xslt-preview-inspector') {
-        let line = 0
-        if (xsltId) {
-          line = findLineByXsltId(xsltContent, xsltId)
-        }
-        if (line <= 0) {
-          const searchTerms = getSearchTerms(id, className, text, tagName)
-          if (searchTerms.length > 0) {
-            line = findLineInCode(xsltContent, searchTerms)
-          }
-        }
-        if (line >= 1) {
-          jumpToXsltLine(line)
-          setInspectorStatus(`Satır ${line} konumuna odaklanıldı (${text ? `"${text.substring(0, 12)}..."` : className || tagName})`)
-          setTimeout(() => setInspectorStatus(null), 3000)
-        }
-        // Also track selected element for contextual toolbar
-        setSelectedElementDetails({ text, targetTagName, targetSrc, targetHref, xsltId, imageIndex, isQrCode, colXsltId, cellXsltId: cellXsltId || '', tableXsltId: tableXsltId || '' })
-      } 
-      
-      // Case 3: Click in Designer mode (focuses selector & loads style panel - stays in designer tab!)
-      else if (source === 'xslt-designer-click') {
-        let sel = ''
-        let elementName = ''
-
-        if (id) {
-          sel = `#${id}`
-          elementName = `${tagName.toUpperCase()}${sel}`
-        } else if (className && typeof className === 'string') {
-          const classes = className.split(/\s+/).filter(c => c.trim().length > 1 && c !== 'hover' && c !== 'uni-selected-element')
-          if (classes.length > 0) {
-            sel = `.${classes[0]}`
-            elementName = `${tagName.toUpperCase()}${sel}`
-          }
-        }
-
-        if (!sel) {
-          sel = tagName.toLowerCase()
-          elementName = tagName.toUpperCase()
-        }
-
-        setSelectedSelector(sel)
-        setSelectedElementName(elementName)
-        setSelectedElementDetails({ text, targetTagName, targetSrc, targetHref, xsltId, imageIndex, isQrCode, colXsltId, cellXsltId: cellXsltId || '', tableXsltId: tableXsltId || '' })
-        
-        // Extract current CSS property values from XSLT code (Prefer computed styles, fallback to XSLT style block)
-        if (styles) {
-          setStyleMargin(styles.margin || '')
-          setStylePadding(styles.padding || '')
-          setStyleFontSize(styles.fontSize ? styles.fontSize.replace('px', '') : '')
-          setStyleColor(rgbToHex(styles.color) || '#000000')
-          
-          // Width & Unit parsing
-          const w = colWidth || styles.width || ''
-          setStyleWidth(w)
-          if (w.includes('%')) {
-            setWidthUnit('%')
-          } else if (w.includes('px')) {
-            setWidthUnit('px')
-          } else if (w === 'auto') {
-            setWidthUnit('auto')
-          } else {
-            setWidthUnit('%')
-          }
-
-          setStyleTextAlign(styles.textAlign || 'left')
-          setStyleFontWeight(styles.fontWeight || 'normal')
-          setStyleFontStyle(styles.fontStyle || 'normal')
-          setStyleTextDecoration(styles.textDecoration || 'none')
-          setStyleWhiteSpace(styles.whiteSpace || 'normal')
-        } else {
-          setStyleMargin(getXsltStyleValue(xsltContent, sel, 'margin') || getXsltStyleValue(xsltContent, sel, 'margin-top') || '')
-          setStylePadding(getXsltStyleValue(xsltContent, sel, 'padding') || getXsltStyleValue(xsltContent, sel, 'padding-top') || '')
-          setStyleFontSize(getXsltStyleValue(xsltContent, sel, 'font-size') || '')
-          setStyleColor(getXsltStyleValue(xsltContent, sel, 'color') || '')
-          
-          // Width & Unit parsing for XSLT style block fallback
-          const w = getXsltStyleValue(xsltContent, sel, 'width') || ''
-          setStyleWidth(w)
-          if (w.includes('%')) {
-            setWidthUnit('%')
-          } else if (w.includes('px')) {
-            setWidthUnit('px')
-          } else if (w === 'auto') {
-            setWidthUnit('auto')
-          } else {
-            setWidthUnit('%')
-          }
-
-          setStyleTextAlign(getXsltStyleValue(xsltContent, sel, 'text-align') || '')
-          setStyleFontWeight(getXsltStyleValue(xsltContent, sel, 'font-weight') || '')
-          setStyleFontStyle(getXsltStyleValue(xsltContent, sel, 'font-style') || '')
-          setStyleTextDecoration(getXsltStyleValue(xsltContent, sel, 'text-decoration') || '')
-          setStyleWhiteSpace(getXsltStyleValue(xsltContent, sel, 'white-space') || 'normal')
-        }
-
-        // Scroll code editor to element line silently in the background (DO NOT SWITCH TAB!)
-        let line = 0
-        if (xsltId) {
-          line = findLineByXsltId(xsltContent, xsltId)
-        }
-        if (line <= 0) {
-          const searchTerms = getSearchTerms(id, className, text, tagName)
-          if (searchTerms.length > 0) {
-            line = findLineInCode(xsltContent, searchTerms)
-          }
-        }
-        if (line > 1) {
-          setSelectedLineNumber(line)
-          if (xsltEditorRef.current) {
-            xsltEditorRef.current.revealLineInCenter(line)
-            xsltEditorRef.current.setPosition({ lineNumber: line, column: 1 })
-          }
-        } else {
-          setSelectedLineNumber(0)
-        }
-      }
-    }
-
-    // Helper helper to generate search priorities
-    const getSearchTerms = (id: string, className: string, text: string, tagName: string) => {
-      const searchTerms: string[] = []
-      if (id) {
-        searchTerms.push(`id="${id}"`)
-        searchTerms.push(`id='${id}'`)
-      }
-      if (className && typeof className === 'string') {
-        const classes = className.split(/\s+/).filter(c => c.trim().length > 1 && c !== 'hover' && c !== 'uni-selected-element')
-        classes.forEach(c => {
-          searchTerms.push(`class="${c}"`)
-          searchTerms.push(`class='${c}'`)
-          searchTerms.push(`.${c}`)
-        })
-      }
-      if (text && text.length > 2 && text.length < 40) {
-        searchTerms.push(text.replace(/['"]/g, ''))
-      }
-      if (tagName) {
-        searchTerms.push(`<${tagName}`)
-      }
-      return searchTerms
-    }
-
-    window.addEventListener('message', handleInspectorMessage)
-    return () => window.removeEventListener('message', handleInspectorMessage)
-  }, [xsltContent, designerActive, inspectorActive, designerImages, selectedElementDetails?.xsltId, setIframeLogs, jumpToXsltLine, updateXsltContent, setInspectorStatus])
 
   // Show toast when HTML is copied
   useEffect(() => {
@@ -1548,32 +1267,6 @@ function App() {
     return match ? match[0] : '#333333'
   }
 
-  // Helper to convert rgb(r, g, b) colors to #hex format for HTML5 color input
-  const rgbToHex = (rgbString: string): string => {
-    if (!rgbString) return ''
-    if (rgbString.startsWith('#')) return rgbString
-    const match = rgbString.match(/^rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i)
-    if (match) {
-      const r = parseInt(match[1], 10)
-      const g = parseInt(match[2], 10)
-      const b = parseInt(match[3], 10)
-      return '#' + [r, g, b].map(x => {
-        const hex = x.toString(16)
-        return hex.length === 1 ? '0' + hex : hex
-      }).join('')
-    }
-    const matchRgba = rgbString.match(/^rgba\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)$/i)
-    if (matchRgba) {
-      const r = parseInt(matchRgba[1], 10)
-      const g = parseInt(matchRgba[2], 10)
-      const b = parseInt(matchRgba[3], 10)
-      return '#' + [r, g, b].map(x => {
-        const hex = x.toString(16)
-        return hex.length === 1 ? '0' + hex : hex
-      }).join('')
-    }
-    return rgbString
-  }
 
   // Handle WYSIWYG style edits from inputs
   const styleSetters = {
