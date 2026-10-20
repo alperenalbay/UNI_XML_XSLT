@@ -43,8 +43,6 @@ import {
   updateXsltText,
   updateElementTextInXsltById,
   updateElementStyleInXsltById,
-  addElementToXslt,
-  removeElementFromXslt,
   updateXsltTagAtLine,
   findLineByXsltId,
   extractAllImagesFromXslt,
@@ -66,7 +64,7 @@ import { detectSheetSize, mmToPx } from './utils/sheetSize'
 import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 import { ToastContainer, useToast, WatermarkPanel } from './components'
 import { useEditorStore } from './store/editorStore'
-import { useFileOps, useTemplates } from './hooks'
+import { useFileOps, useTemplates, useElementOps } from './hooks'
 
 
 function App() {
@@ -1854,27 +1852,14 @@ function App() {
 
 
   // Visual layout XML addition/removals
-  const handleAddTextElement = (parentSelector: string, details?: ElementDetails | null) => {
-    const updated = addElementToXslt(xsltContent, parentSelector, "Yeni Metin Alanı (Düzenlemek için çift tıklayın)", details ?? undefined)
-    if (updated !== xsltContent) {
-      updateXsltContent(updated)
-      setInspectorStatus("Boş alana yeni metin kutusu eklendi.")
-      setTimeout(() => setInspectorStatus(null), 3000)
-    }
-  }
-
-  const handleRemoveElement = (selector: string, details?: ElementDetails | null) => {
-    if (!selector && !details?.xsltId && !details?.tableXsltId) return
-    const updated = removeElementFromXslt(xsltContent, selector, details ?? undefined)
-    if (updated !== xsltContent) {
-      updateXsltContent(updated)
-      setSelectedSelector('')
-      setSelectedElementDetails(null)
-      setSelectedLineNumber(0)
-      setInspectorStatus("Seçilen eleman tasarımdan silindi.")
-      setTimeout(() => setInspectorStatus(null), 3000)
-    }
-  }
+  const { handleAddTextElement, handleRemoveElement } = useElementOps(
+    xsltContent,
+    updateXsltContent,
+    setInspectorStatus,
+    setSelectedSelector,
+    setSelectedElementDetails,
+    setSelectedLineNumber
+  )
 
   const handleSaveCurrentAsTemplate = async (nameOverride?: string) => {
     const name = (nameOverride || saveTemplateName).trim()
