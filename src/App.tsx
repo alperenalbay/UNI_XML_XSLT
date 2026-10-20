@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
-import type { ElementDetails, ImageInfo } from './utils/xsltTransformer'
+import type { ElementDetails } from './utils/xsltTransformer'
 
 type MonacoEditorInstance = Parameters<OnMount>[0];
 type MonacoInstance = Parameters<OnMount>[1];
@@ -39,13 +39,6 @@ import {
   extractEmbeddedXslt, 
   removeEmbeddedXslt,
   updateElementTextInXsltById,
-  extractAllImagesFromXslt,
-  replaceImageInXslt,
-  addImageToXslt,
-  updateImageStyleInXslt,
-  getImageStyleFromXslt,
-  getImageTransformFromXslt,
-  setImageTransformInXslt
 } from './utils/xsltTransformer'
 import {
   PREVIEW_SANDBOX,
@@ -55,6 +48,8 @@ import { findLineInCode } from './utils/xsltCodeSearch'
 import { useInspectorMessages } from './hooks/useInspectorMessages'
 import { usePreviewDocument } from './hooks/usePreviewDocument'
 import { usePreviewIframe } from './hooks/usePreviewIframe'
+import { useAppUpdate } from './hooks/useAppUpdate'
+import { useImageManager } from './hooks/useImageManager'
 import { DEFAULT_XML, DEFAULT_XSLT, SIMPLE_XSLT, EMPTY_XSLT } from './samples/invoiceSample'
 import { ToastContainer, useToast, WatermarkPanel } from './components'
 import { useEditorStore } from './store/editorStore'
@@ -213,15 +208,6 @@ function App() {
   const [selectedLineNumber, setSelectedLineNumber] = useState<number>(0)
 
   // Image management state
-  const [designerImages, setDesignerImages] = useState<ImageInfo[]>([])
-  const [expandedImageIdx, setExpandedImageIdx] = useState<number | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const replaceImageRef = useRef<{ src: string; index: number } | null>(null)
-  const [imageWidths, setImageWidths] = useState<Record<number, string>>({})
-  const [imageAligns, setImageAligns] = useState<Record<number, string>>({})
-  const [imageMargins, setImageMargins] = useState<Record<number, string>>({})
-  const [imageTransforms, setImageTransforms] = useState<Record<number, { x: number; y: number }>>({})
-  const [pendingTransforms, setPendingTransforms] = useState<Record<string, { x: number; y: number }>>({})
 
   const templatesToastShown = useRef(false);
   const templatesLoading = useRef(false);
@@ -287,209 +273,20 @@ function App() {
 
   // Auto updater states (Zustand state references)
 
-  const checkUpdates = useCallback(async () => {
-    try {
-      const res = await fetch('/api/check-update')
-      if (res.ok) {
-        const data = await res.json()
-        if (data.updateAvailable) {
-          setUpdateAvailable(true)
-          addToast({
-            type: 'info',
-            message: 'Güncelleme Mevcut',
-            description: `Yeni sürüm ${data.version} kullanılabilir`
-          })
-        }
-      }
-    } catch (err) {
-      console.error('Failed to check updates:', err)
-      addToast({
-        type: 'warning',
-        message: 'Güncelleme Kontrolü Başarısız',
-        description: 'Güncellemeler kontrol edilemedi'
-      })
-    }
-  }, [setUpdateAvailable, addToast])
-
-  const triggerUpdate = async () => {
-    setIsUpdating(true)
-    setUpdateCheckStatus('Uygulama güncelleniyor (git pull & npm install)... Lütfen bu sayfayı kapatmayın.')
-    addToast({
-      type: 'info',
-      message: 'Güncelleme Başlıyor',
-      description: 'Uygulama güncelleniyor, lütfen bekleyiniz...'
-    })
-    try {
-      const res = await fetch('/api/trigger-update', { method: 'POST' })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.changed === false) {
-          setUpdateAvailable(false)
-          setUpdateCheckStatus('Uygulama zaten en güncel sürümde çalışıyor, güncelleme gerekmedi.')
-          addToast({
-            type: 'info',
-            message: 'Zaten Güncel',
-            description: 'Uygulama en güncel sürümde, güncelleme gerekmedi.'
-          })
-        } else {
-          setUpdateCheckStatus('Güncelleme başarıyla tamamlandı! Sayfa 3 saniye içinde yenilenecek.')
-          addToast({
-            type: 'success',
-            message: 'Güncelleme Tamamlandı',
-            description: 'Sayfa yeniden yüklenecek...'
-          })
-          setTimeout(() => {
-            window.location.reload()
-          }, 3000)
-        }
-      } else {
-        const data = await res.json()
-        addToast({
-          type: 'error',
-          message: 'Güncelleme Başarısız',
-          description: data.error || 'Bilinmeyen hata'
-        })
-        setUpdateCheckStatus(null)
-      }
-    } catch (err) {
-      console.error(err)
-      addToast({
-        type: 'error',
-        message: 'Güncelleme Hatası',
-        description: 'Güncelleme işlemi sırasında hata oluştu'
-      })
-      setUpdateCheckStatus(null)
-    } finally {
-      setIsUpdating(false)
-    }
-  }
+  // Self-update: check on mount, apply on demand.
+  const { checkUpdates, triggerUpdate } = useAppUpdate(
+    setUpdateAvailable,
+    setIsUpdating,
+    setUpdateCheckStatus,
+    addToast,
+  )
 
   // Load custom templates and check updates on mount
   useEffect(() => {
     checkUpdates()
   }, [checkUpdates])
 
-  // Scan XSLT for images when content changes
-  useEffect(() => {
-    const images = extractAllImagesFromXslt(xsltContent)
-    setDesignerImages(images)
 
-    const widths: Record<number, string> = {}
-    const aligns: Record<number, string> = {}
-    const margins: Record<number, string> = {}
-    images.forEach((img: ImageInfo, i: number) => {
-      widths[i] = getImageStyleFromXslt(xsltContent, img.src, 'width') || '300px'
-      aligns[i] = getImageStyleFromXslt(xsltContent, img.src, 'text-align') || 'center'
-      margins[i] = getImageStyleFromXslt(xsltContent, img.src, 'margin') || '10px 0px'
-    })
-    setImageWidths(widths)
-    setImageAligns(aligns)
-    setImageMargins(margins)
-
-    const transforms: Record<number, { x: number; y: number }> = {}
-    images.forEach((img: ImageInfo, i: number) => {
-      transforms[i] = getImageTransformFromXslt(xsltContent, img.src)
-    })
-    setImageTransforms(transforms)
-  }, [xsltContent])
-
-  // Handle file selection for image add/replace
-  const handleImageFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const validTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml']
-    if (!validTypes.includes(file.type)) {
-      addToast({ type: 'error', message: 'Geçersiz Format', description: 'PNG, JPEG, GIF, WebP veya SVG dosyası seçin.' })
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const dataUri = ev.target?.result as string
-      if (!dataUri) return
-
-      if (replaceImageRef.current) {
-        const oldSrc = replaceImageRef.current.src
-        const updated = replaceImageInXslt(xsltContent, oldSrc, dataUri)
-        if (updated !== xsltContent) {
-          updateXsltContent(updated)
-          setPendingTransforms(prev => {
-            const next = { ...prev }
-            delete next[oldSrc]
-            return next
-          })
-          addToast({ type: 'success', message: 'Görsel Değiştirildi', description: 'Görsel başarıyla güncellendi.' })
-        }
-        replaceImageRef.current = null
-      } else {
-        const updated = addImageToXslt(xsltContent, dataUri, file.name)
-        if (updated !== xsltContent) {
-          updateXsltContent(updated)
-          addToast({ type: 'success', message: 'Görsel Eklendi', description: 'Yeni görsel tasarıma eklendi.' })
-        }
-      }
-    }
-    reader.readAsDataURL(file)
-
-    e.target.value = ''
-  }
-
-  const handleReplaceImage = (image: ImageInfo) => {
-    replaceImageRef.current = { src: image.src, index: image.index }
-    fileInputRef.current?.click()
-  }
-
-  const handleApplyImageTransforms = () => {
-    const entries = Object.entries(pendingTransforms)
-    if (entries.length === 0) return
-
-    let currentXslt = xsltContent
-    for (const [src, pos] of entries) {
-      const updated = setImageTransformInXslt(currentXslt, src, pos.x, pos.y)
-      if (updated !== currentXslt) currentXslt = updated
-    }
-
-    if (currentXslt !== xsltContent) {
-      updateXsltContent(currentXslt)
-      const result = transformXmlWithXslt(xmlContent, currentXslt)
-      if (!result.error) setHtmlOutput(result.html)
-
-      const newTransforms: Record<number, { x: number; y: number }> = {}
-      designerImages.forEach((img: ImageInfo, i: number) => {
-        const pend = pendingTransforms[img.src]
-        if (pend) newTransforms[i] = pend
-        else newTransforms[i] = imageTransforms[i] || { x: 0, y: 0 }
-      })
-      setImageTransforms(newTransforms)
-      setPendingTransforms({})
-
-      addToast({ type: 'success', message: 'Değişiklikler Kaydedildi', description: `${entries.length} görsel konumu XSLT'ye uygulandı.` })
-    }
-  }
-
-  const handleResetImageTransforms = () => {
-    setPendingTransforms({})
-    const result = transformXmlWithXslt(xmlContent, xsltContent)
-    if (!result.error) setHtmlOutput(result.html)
-  }
-
-  const handleAddImage = () => {
-    replaceImageRef.current = null
-    fileInputRef.current?.click()
-  }
-
-  const handleImageStyleChange = (idx: number, imgSrc: string, property: string, value: string) => {
-    const updated = updateImageStyleInXslt(xsltContent, imgSrc, property, value)
-    if (updated !== xsltContent) {
-      updateXsltContent(updated)
-      if (property === 'width' || property === 'max-width') setImageWidths(prev => ({ ...prev, [idx]: value }))
-      else if (property === 'text-align') setImageAligns(prev => ({ ...prev, [idx]: value }))
-      else if (property === 'margin') setImageMargins(prev => ({ ...prev, [idx]: value }))
-      const result = transformXmlWithXslt(xmlContent, updated)
-      if (!result.error) setHtmlOutput(result.html)
-    }
-  }
 
   // Drag & Drop / Banner state (Zustand state references)
 
@@ -611,6 +408,33 @@ function App() {
   const updateXsltContent = useCallback((newVal: string) => {
     setXsltContent(newVal)
   }, [setXsltContent])
+
+  // Designer image management: scan, add/replace, per-image styles and the
+  // drag-position apply/reset flow.
+  const {
+    designerImages,
+    imageWidths,
+    imageAligns,
+    imageMargins,
+    imageTransforms,
+    pendingTransforms,
+    setPendingTransforms,
+    expandedImageIdx,
+    setExpandedImageIdx,
+    fileInputRef,
+    handleImageFileSelected,
+    handleReplaceImage,
+    handleAddImage,
+    handleImageStyleChange,
+    handleApplyImageTransforms,
+    handleResetImageTransforms,
+  } = useImageManager(
+    xsltContent,
+    xmlContent,
+    updateXsltContent,
+    setHtmlOutput,
+    addToast,
+  )
 
   // XML / XSLT Syntax / Well-formedness check
   useEffect(() => {
