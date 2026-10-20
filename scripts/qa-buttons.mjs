@@ -4,6 +4,7 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setupQaFixture, FIXTURE_LABEL } from './qa-fixture.mjs';
 
 const BASE = 'http://localhost:5173';
 const SCREENS = '.openchamber/screenshots';
@@ -30,6 +31,10 @@ async function step(name, fn, timeout = 10000) {
 }
 
 async function main() {
+  // Kendi fixture sablonumuzu yaziyoruz: public/templates/ gitignore'dadir
+  // ve CI'da bos gelir; kullanici sablonlarina baglanamayiz.
+  const cleanupFixture = await setupQaFixture();
+
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   page.setDefaultTimeout(8000);
@@ -42,7 +47,7 @@ async function main() {
   await step('anasayfa yuklendi', async () => {
     await page.getByRole('button', { name: /Şablonum Yok/ }).first().waitFor({ state: 'visible' });
   });
-  for (const name of ['gib', 'koyu-tema', 'mini-fis', 'modern-mavi', 'sdandart-iskontolu', 'standart']) {
+  for (const name of [FIXTURE_LABEL]) {
     await step(`sablon karti: ${name}`, async () => {
       await page.locator('button', { hasText: 'Yükle' })
         .filter({ hasText: name })
@@ -52,8 +57,8 @@ async function main() {
   }
 
   // ---------- Sablon yukle ----------
-  await step('gib sablonu yuklendi', async () => {
-    await page.getByRole('button', { name: /gib/ }).click();
+  await step('fixture sablonu yuklendi', async () => {
+    await page.getByRole('button', { name: new RegExp(`^${FIXTURE_LABEL}`) }).click();
     await page.waitForFunction(() => document.body.innerText.includes('Sistem Hazır'), { timeout: 15000 });
   });
 
@@ -85,11 +90,11 @@ async function main() {
 
   // ---------- Eleman secimi ----------
   await step('eleman listesi doldu', async () => {
-    const btn = page.locator('button', { hasText: 'h1 · ' }).first();
+    const btn = page.locator('button', { hasText: 'h1 · QA BAŞLIK' }).first();
     await btn.waitFor({ state: 'visible', timeout: 8000 });
   });
   await step('eleman secimi paneli doldurdu', async () => {
-    const btn = page.locator('button', { hasText: 'h1 · ' }).first();
+    const btn = page.locator('button', { hasText: 'h1 · QA BAŞLIK' }).first();
     await page.waitForTimeout(600);
     await btn.click();
     await page.waitForSelector('text=Düzenlenen Selector:', { timeout: 5000 });
@@ -198,6 +203,7 @@ async function main() {
 
   await page.screenshot({ path: join(SCREENS, 'qa-buttons.png'), fullPage: false });
   await browser.close();
+  await cleanupFixture();
 
   // Test şablonunu temizle (public/templates KVKK klasörü — artık bırakılmamalı).
   await unlink(join('public', 'templates', 'qa-test-template.xslt')).catch(() => undefined);

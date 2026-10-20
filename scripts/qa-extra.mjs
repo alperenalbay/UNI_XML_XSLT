@@ -1,5 +1,6 @@
 // Hızlı buton QA — kanıtlanmış seçicilerle, 5s timeout, izole adımlar.
 import { chromium } from 'playwright';
+import { setupQaFixture, FIXTURE_LABEL } from './qa-fixture.mjs';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
@@ -15,6 +16,7 @@ async function step(name, fn) {
 }
 
 async function main() {
+  const cleanupFixture = await setupQaFixture();
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   page.setDefaultTimeout(5000);
@@ -22,13 +24,13 @@ async function main() {
   page.on('pageerror', (e) => consoleErrors.push('PAGEERROR: ' + e.message));
 
   await page.goto(BASE, { waitUntil: 'networkidle' });
-  await page.getByRole('button', { name: /gib/ }).click();
+  await page.getByRole('button', { name: new RegExp('^' + FIXTURE_LABEL) }).click();
   await page.waitForTimeout(5000);
   await page.getByRole('button', { name: /Görsel Tasarımcı/ }).click();
   await page.waitForTimeout(400);
 
   // seç bir element ki stil paneli dolu olsun
-  await page.locator('button', { hasText: 'h1 · e-Fatura' }).first().click();
+  await page.locator('button', { hasText: 'h1 · QA BAŞLIK' }).first().click();
   await page.waitForTimeout(250);
 
   await step('script toggle AÇIK->KAPALI->AÇIK', async () => {
@@ -73,6 +75,7 @@ async function main() {
   });
   await page.screenshot({ path: path.join(SCREENS, 'qa-extra.png'), fullPage: false });
   await browser.close();
+  await cleanupFixture();
 
   const passed = results.filter(r => r.ok).length;
   console.log('\n========== QA-EXTRA ==========');

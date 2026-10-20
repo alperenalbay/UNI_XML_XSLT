@@ -1,5 +1,6 @@
 // Sürükle-bırak, kaydırma, ekleme fonksiyonları QA'sı.
 import { chromium } from 'playwright';
+import { setupQaFixture, FIXTURE_LABEL } from './qa-fixture.mjs';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
@@ -18,12 +19,13 @@ async function step(name, fn) {
 }
 
 async function main() {
+  const cleanupFixture = await setupQaFixture();
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   page.setDefaultTimeout(10000);
 
   await page.goto(BASE, { waitUntil: 'networkidle' });
-  await page.getByRole('button', { name: /gib/ }).click();
+  await page.getByRole('button', { name: new RegExp('^' + FIXTURE_LABEL) }).click();
   await page.waitForSelector('text=Sistem Hazır', { timeout: 15000 });
 
   const frame = page.frameLocator('iframe[title="Fatura Canlı Önizleme"]');
@@ -91,9 +93,9 @@ async function main() {
   await page.getByRole('button', { name: /Görsel Tasarımcı/ }).click();
   await page.waitForTimeout(400);
   await step('WYSIWYG element sec (h1)', async () => {
-    await page.locator('button', { hasText: 'h1 · e-Fatura' }).first().click();
+    await page.locator('button', { hasText: 'h1 · QA BAŞLIK' }).first().click();
     await page.waitForTimeout(250);
-    await page.waitForSelector('text=Düzenlenen Selector: h1', { timeout: 5000 });
+    await page.waitForSelector('text=Düzenlenen Selector: #qa-title', { timeout: 5000 });
   });
   await step('Icine Ekle (metin kutusu)', async () => {
     await page.getByRole('button', { name: 'İçine Ekle' }).first().click();
@@ -103,7 +105,7 @@ async function main() {
   // ---------- Bu Elemanı Sil ----------
   await step('Bu Elemani Sil', async () => {
     // re-select h1 first
-    await page.locator('button', { hasText: 'h1 · e-Fatura' }).first().click();
+    await page.locator('button', { hasText: 'h1 · QA BAŞLIK' }).first().click();
     await page.waitForTimeout(250);
     await page.getByRole('button', { name: 'Bu Elemanı Sil' }).first().click();
     await page.waitForTimeout(300);
@@ -111,6 +113,7 @@ async function main() {
 
   await page.screenshot({ path: path.join(SCREENS, 'qa-drag-final.png'), fullPage: false });
   await browser.close();
+  await cleanupFixture();
 
   const passed = results.filter(r => r.ok).length;
   console.log('\n========== QA-DRAG ==========');
