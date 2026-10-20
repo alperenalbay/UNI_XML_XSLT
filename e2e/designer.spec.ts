@@ -179,6 +179,23 @@ test.describe('Sayfa boyutu algılama', () => {
     return Number(zoom);
   }
 
+  /**
+   * Zoom degeri asenkron olarak (iframe yuklenmesi + ResizeObserver)
+   * yeniden hesaplanir. Degeri bir kez okumak flaky test uretiyor: bazen
+   * hesaplama bitmeden onceki deger okunuyor. Burada degerin iki kez ayni
+   * okundugunu bekleriz.
+   */
+  async function stableZoom(page: Page): Promise<number> {
+    let previous = -1;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const current = await zoomPercent(page);
+      if (current === previous && current > 0) return current;
+      previous = current;
+      await page.waitForTimeout(150);
+    }
+    return previous;
+  }
+
   test('A4 varsayılan kalır', async ({ page }) => {
     await loadProbe(page);
     await expect(page.getByText(/Önizleme A4 baskı/)).toBeVisible();
@@ -196,10 +213,10 @@ test.describe('Sayfa boyutu algılama', () => {
 
   test('dar şablon "Genişliğe Sığdır" ile büyütülür', async ({ page }) => {
     await loadProbe(page);
-    const a4Zoom = await zoomPercent(page);
+    const a4Zoom = await stableZoom(page);
 
     await loadReceipt(page);
-    const receiptZoom = await zoomPercent(page);
+    const receiptZoom = await stableZoom(page);
 
     // Ölçek artık 794px'e göre değil gerçek sayfa genişliğine göre hesaplanıyor:
     // dar fiş, aynı panelde A4'ten daha büyük görünmeli (elle büyütmeye gerek kalmaz).
