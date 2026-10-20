@@ -19,6 +19,9 @@ blob-report
 .playwright
 coverage
 
+# OpenChamber generated screenshots / temp
+.openchamber/screenshots
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

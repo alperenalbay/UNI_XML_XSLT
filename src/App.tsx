@@ -1876,11 +1876,13 @@ function App() {
     }
   }
 
-  const handleSaveCurrentAsTemplate = async () => {
-    if (!saveTemplateName.trim()) {
+  const handleSaveCurrentAsTemplate = async (nameOverride?: string) => {
+    const name = (nameOverride || saveTemplateName).trim()
+    if (!name) {
       alert('Lütfen şablon için geçerli bir isim girin.')
       return
     }
+    setSaveTemplateName(name)
     setIsSavingTemplate(true)
     try {
       const res = await fetch('/api/save-template', {
@@ -1889,12 +1891,12 @@ function App() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          name: saveTemplateName.trim(),
+          name,
           content: xsltContent
         })
       })
       if (res.ok) {
-        setInspectorStatus(`"${saveTemplateName}" şablonu başarıyla kaydedildi.`)
+        setInspectorStatus(`"${name}" şablonu başarıyla kaydedildi.`)
         setTimeout(() => setInspectorStatus(null), 3000)
         setSaveTemplateName('')
         await loadCustomTemplates({ silent: true })
@@ -3979,6 +3981,18 @@ function App() {
                 <Download className="h-3.5 w-3.5" />
                 Dosya İndir
               </button>
+              <button
+                onClick={() => {
+                  const name = window.prompt('Şablon adı:')
+                  if (name && name.trim()) {
+                      handleSaveCurrentAsTemplate(name.trim())
+                  }
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium shadow-lg shadow-emerald-600/10 transition duration-150 cursor-pointer"
+                title="Mevcut düzenlemeyi yeni şablon olarak kaydet"
+              >
+                Şablon Olarak Kaydet
+              </button>
             </div>
           </div>
 
@@ -4497,7 +4511,7 @@ function App() {
                             className="flex-1 bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition"
                           />
                           <button
-                            onClick={handleSaveCurrentAsTemplate}
+                            onClick={() => handleSaveCurrentAsTemplate()}
                             disabled={isSavingTemplate}
                             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800/50 text-white font-bold text-xs rounded transition flex items-center gap-1 cursor-pointer shrink-0"
                           >
