@@ -56,12 +56,13 @@ export function WatermarkPanel() {
   };
 
   const handleSaveToXslt = () => {
-    if (!watermarkImage) {
-      addToast({ type: 'error', message: 'Görsel yok', description: 'Önce bir filigran görseli yükleyin' });
+    if (!watermarkImage && !watermarkText.trim()) {
+      addToast({ type: 'error', message: 'Filigran yok', description: 'Önce bir filigran görseli veya metni girin' });
       return;
     }
     const updated = addWatermarkToXslt(xsltContent, {
-      image: watermarkImage,
+      image: watermarkImage || undefined,
+      text: watermarkImage ? undefined : watermarkText.trim(),
       size: watermarkSize,
       opacity: watermarkOpacity,
       rotation: watermarkRotation,
@@ -209,7 +210,7 @@ export function WatermarkPanel() {
       <div className="grid grid-cols-2 gap-2 pt-2">
         <button
           onClick={handleSaveToXslt}
-          disabled={!watermarkImage}
+          disabled={!watermarkImage && !watermarkText.trim()}
           className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-xs font-bold rounded px-2 py-2 transition"
           title="Bu filigranı XSLT koduna kalıcı olarak yaz"
         >

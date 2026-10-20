@@ -1635,7 +1635,7 @@ function App() {
           setTimeout(() => setInspectorStatus(null), 3000)
         }
         // Also track selected element for contextual toolbar
-        setSelectedElementDetails({ targetTagName, targetSrc, targetHref, xsltId, imageIndex, isQrCode, colXsltId, cellXsltId: cellXsltId || '', tableXsltId: tableXsltId || '' })
+        setSelectedElementDetails({ text, targetTagName, targetSrc, targetHref, xsltId, imageIndex, isQrCode, colXsltId, cellXsltId: cellXsltId || '', tableXsltId: tableXsltId || '' })
       } 
       
       // Case 3: Click in Designer mode (focuses selector & loads style panel - stays in designer tab!)
@@ -1661,7 +1661,7 @@ function App() {
 
         setSelectedSelector(sel)
         setSelectedElementName(elementName)
-        setSelectedElementDetails({ targetTagName, targetSrc, targetHref, xsltId, imageIndex, isQrCode, colXsltId, cellXsltId: cellXsltId || '', tableXsltId: tableXsltId || '' })
+        setSelectedElementDetails({ text, targetTagName, targetSrc, targetHref, xsltId, imageIndex, isQrCode, colXsltId, cellXsltId: cellXsltId || '', tableXsltId: tableXsltId || '' })
         
         // Extract current CSS property values from XSLT code (Prefer computed styles, fallback to XSLT style block)
         if (styles) {
@@ -3413,7 +3413,41 @@ function App() {
                   </button>
                 </div>
 
-                <div className="mt-8 pt-4 border-t border-slate-900 text-xs text-slate-500 flex items-center justify-between">
+                {selectedElementDetails?.xsltId && (
+                  <div className="space-y-1.5 pt-2 border-t border-slate-700/60">
+                    <span className="text-[11px] text-slate-400 block font-semibold">Metin (İçerik):</span>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        defaultValue={selectedElementDetails.text || ''}
+                        key={selectedElementDetails.xsltId}
+                        id="wysiwyg-text-input"
+                        className="flex-1 py-1.5 px-2 bg-slate-900 border border-slate-700 focus:border-indigo-500/60 text-xs text-slate-300 rounded-lg outline-none"
+                        placeholder="Yeni metin..."
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const input = document.getElementById('wysiwyg-text-input') as HTMLInputElement | null
+                          const val = input?.value?.trim() || ''
+                          if (val && selectedElementDetails?.xsltId) {
+                            const updated = updateElementTextInXsltById(xsltContent, selectedElementDetails.xsltId, val)
+                            if (updated !== xsltContent) {
+                              updateXsltContent(updated)
+                              setInspectorStatus(`Metin güncellendi: "${val.substring(0, 20)}"`)
+                              setTimeout(() => setInspectorStatus(null), 2000)
+                            }
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition cursor-pointer"
+                      >
+                        Uygula
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4 pt-4 border-t border-slate-900 text-xs text-slate-500 flex items-center justify-between">
                   <span>💡 İpucu: Önizlemedeki herhangi bir yazıya <b>çift tıklayarak</b> içeriğini doğrudan değiştirebilirsiniz.</span>
                   <span>Düzenlenen Selector: {selectedSelector || 'Yok'}</span>
                 </div>

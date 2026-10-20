@@ -522,7 +522,8 @@ export function updateXsltText(xsltCode: string, oldText: string, newText: strin
  * Görsel gövdede tam ortalanmış, silüet (siyah + düşük opaklık) olarak konumlanır.
  */
 export interface WatermarkOptions {
-  image: string;         // base64 data URI (örn. "data:image/png;base64,....")
+  image?: string;         // base64 data URI (örn. "data:image/png;base64,....")
+  text?: string;          // metin filigranı (görsel yoksa kullanılır)
   size: number;           // fatura genişliğine göre yüzde (1-100)
   opacity: number;        // 0-100 (silüet için düşük değer önerilir)
   rotation: number;       // derece
@@ -540,7 +541,7 @@ function escapeForXmlAttribute(text: string): string {
 }
 
 function buildWatermarkBlock(opts: WatermarkOptions): string {
-  const { image, size, opacity, rotation } = opts;
+  const { image, text, size, opacity, rotation } = opts;
   const safeSize = Math.max(1, Math.min(100, Math.round(size)));
   const safeOpacity = Math.max(0, Math.min(100, Math.round(opacity)));
   const safeRotation = Math.round(rotation);
@@ -574,10 +575,13 @@ function buildWatermarkBlock(opts: WatermarkOptions): string {
     '-webkit-user-select:none',
     'user-select:none',
   ].join('; ');
-  const escapedImage = escapeForXmlAttribute(image);
+  const useText = !image && !!text;
+  const content = useText
+    ? `<span style="font-family:Arial,Helvetica,sans-serif;font-weight:900;font-size:${Math.max(24, Math.round(size * 4))}px;color:#000000;text-align:center;white-space:nowrap;user-select:none;-webkit-user-select:none;">${escapeForXmlAttribute(text)}</span>`
+    : `<img src="${escapeForXmlAttribute(image || '')}" alt="" style="${imgStyle}" />`;
   return `${WATERMARK_START_MARKER}
 <div class="uni-watermark-overlay" style="${overlayStyle}">
-  <img src="${escapedImage}" alt="" style="${imgStyle}" />
+  ${content}
 </div>
 ${WATERMARK_END_MARKER}`;
 }
@@ -591,7 +595,7 @@ ${WATERMARK_END_MARKER}`;
  * XSLT koduna kalıcı olarak yazılır — kullanıcı düzenleyebilir.
  */
 export function addWatermarkToXslt(xsltCode: string, opts: WatermarkOptions): string {
-  if (!xsltCode.trim() || !opts.image) return xsltCode;
+  if (!xsltCode.trim() || (!opts.image && !opts.text)) return xsltCode;
 
   try {
     const block = buildWatermarkBlock(opts);
@@ -659,6 +663,7 @@ export function hasWatermarkInXslt(xsltCode: string): boolean {
  * taşınan kimlik/belirteç bilgileri (WYSIWYG seçim detayları).
  */
 export interface ElementDetails {
+  text?: string;
   xsltId?: string;
   tableXsltId?: string;
   cellXsltId?: string;
