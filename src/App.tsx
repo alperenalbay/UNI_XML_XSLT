@@ -155,6 +155,54 @@ function App() {
   const [selectedElementName, setSelectedElementName] = useState<string>('')
   const [selectedElementDetails, setSelectedElementDetails] = useState<ElementDetails | null>(null)
   const [showTableBorders, setShowTableBorders] = useState<boolean>(false)
+  // Element picker: lets the user select a preview element from a searchable
+  // list instead of clicking inside the iframe (list-based fallback for the
+  // WYSIWYG panel).
+  const [elementPickerOptions, setElementPickerOptions] = useState<Array<{ id: string; label: string }>>([])
+  const [elementPickerFilter, setElementPickerFilter] = useState<string>('')
+
+  // Refresh the picker list from the live preview DOM. Runs when the dropdown
+  // opens, so the list always reflects the latest transformed output.
+  const refreshElementPickerOptions = () => {
+    try {
+      const innerDoc = iframeRef.current?.contentDocument
+      if (!innerDoc) {
+        setElementPickerOptions([])
+        return
+      }
+      const list: Array<{ id: string; label: string }> = []
+      innerDoc.querySelectorAll<HTMLElement>('[data-xslt-id]').forEach((el) => {
+        const id = el.getAttribute('data-xslt-id')
+        if (!id) return
+        const tag = el.tagName.toLowerCase()
+        // Skip structural wrappers that "contain" the whole document text and
+        // would drown the list (their innerText equals the entire page).
+        if (['html', 'body', 'head', 'title', 'script', 'style', 'meta', 'link'].includes(tag)) return
+        const text = (el.innerText || '').trim().replace(/\s+/g, ' ')
+        // Keep elements that carry text, plus images and table cells (those
+        // have their own panel controls).
+        if (text.length === 0 && tag !== 'img' && tag !== 'td' && tag !== 'th') return
+        const src = el.getAttribute('src')
+        const srcNote = src ? (src.startsWith('data:') ? 'görsel' : src.slice(0, 28)) : 'boş'
+        const label = text
+          ? `${tag} · ${text.slice(0, 48)}${text.length > 48 ? '…' : ''}`
+          : `${tag} · ${srcNote}`
+        list.push({ id, label })
+      })
+      setElementPickerOptions(list.slice(0, 500))
+    } catch {
+      setElementPickerOptions([])
+    }
+  }
+
+  // Keep the picker list in sync with the latest transformed preview. The
+  // transform is async, so refresh shortly after the content changes.
+  useEffect(() => {
+    if (editorActiveTab !== 'designer') return
+    const t = setTimeout(() => refreshElementPickerOptions(), 350)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorActiveTab, xsltContent])
 
   // CSS values for Selected Element
   const [styleMargin, setStyleMargin] = useState<string>('')
@@ -2730,6 +2778,59 @@ function App() {
                       <Sliders className="h-4 w-4 text-purple-400" />
                       Seçilen Eleman Stil Ayarları (WYSIWYG)
                     </h4>
+
+                    {/* Element picker: select an element from a searchable list
+                        instead of clicking inside the preview iframe. Selection
+                        reuses the iframe's 'select-element-by-id' message (same
+                        as the "Hücreyi Seç" button). */}
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] text-slate-400 block font-semibold">
+                        Eleman Listesinden Seç:
+                      </span>
+                      <input
+                        type="text"
+                        value={elementPickerFilter}
+                        onChange={(e) => setElementPickerFilter(e.target.value)}
+                        placeholder="Ara: başlık, hücre metni, td, h1…"
+                        className="w-full py-1.5 px-2 bg-slate-900 border border-slate-700 focus:border-indigo-500/60 text-xs text-slate-300 rounded-lg outline-none"
+                      />
+                      <div className="max-h-44 overflow-y-auto scrollbar-thin rounded-lg border border-slate-800 bg-slate-950/40">
+                        {elementPickerOptions
+                          .filter((o) =>
+                            elementPickerFilter.trim() === ''
+                              ? true
+                              : o.label.toLowerCase().includes(elementPickerFilter.trim().toLowerCase())
+                          )
+                          .slice(0, 80)
+                          .map((o, i) => (
+                            <button
+                              key={`${o.id}-${i}`}
+                              type="button"
+                              onClick={() => {
+                                if (iframeRef.current?.contentWindow) {
+                                  iframeRef.current.contentWindow.postMessage(
+                                    { action: 'select-element-by-id', xsltId: o.id },
+                                    '*'
+                                  )
+                                }
+                              }}
+                              className="w-full text-left px-2 py-1.5 text-[10px] font-mono text-slate-400 hover:text-white hover:bg-indigo-500/10 border-b border-slate-900/60 last:border-b-0 transition cursor-pointer truncate"
+                              title={o.label}
+                            >
+                              {o.label}
+                            </button>
+                          ))}
+                        {elementPickerOptions.filter((o) =>
+                          elementPickerFilter.trim() === ''
+                            ? true
+                            : o.label.toLowerCase().includes(elementPickerFilter.trim().toLowerCase())
+                        ).length === 0 && (
+                          <div className="px-2 py-3 text-[10px] text-slate-600 text-center">
+                            Eşleşen eleman yok
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
                     {selectedSelector ? (
                       <div className="space-y-4">
