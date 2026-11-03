@@ -816,22 +816,13 @@ export function removeElementFromXslt(xsltCode: string, selector: string, detail
 
     let el: Element | null = null;
 
-    // 1. Try to find by tableXsltId (remove whole table) — table seçildiğinde tüm tabloyu sil
-    if (!el && details && details.tableXsltId) {
-      injectXsltIdsWithCounter(doc.documentElement, 1);
-      const tableEl = findElementByXsltId(doc.documentElement, String(details.tableXsltId));
-      if (tableEl && tableEl.tagName.toLowerCase() === 'table') {
-        el = tableEl;
-      }
-    }
-
-    // 2. Try to find by unique temporary XSLT ID if details is provided
+    // 1. Try to find by unique temporary XSLT ID if details is provided
     if (!el && details && details.xsltId) {
       injectXsltIdsWithCounter(doc.documentElement, 1);
       el = findElementByXsltId(doc.documentElement, String(details.xsltId));
     }
 
-    // 3. If not found by XSLT ID, fallback to detailed image matching (by index first, then base64)
+    // 2. If not found by XSLT ID, fallback to detailed image matching (by index first, then base64)
     if (!el && details && details.targetTagName) {
       const targetTag = details.targetTagName.toLowerCase();
       const targetSrc = details.targetSrc || '';
@@ -911,7 +902,17 @@ export function removeElementFromXslt(xsltCode: string, selector: string, detail
       }
     }
 
-    // 4. Fallback to selector matching if exact match not found AND no xsltId was provided
+    // 4. Fallback: remove the whole table by tableXsltId (legacy "cell selected -> delete table" behavior).
+    // Runs only when no exact element was found - an explicitly selected element always wins.
+    if (!el && details && details.tableXsltId) {
+      injectXsltIdsWithCounter(doc.documentElement, 1);
+      const tableEl = findElementByXsltId(doc.documentElement, String(details.tableXsltId));
+      if (tableEl && tableEl.tagName.toLowerCase() === 'table') {
+        el = tableEl;
+      }
+    }
+
+    // 5. Fallback to selector matching if nothing else matched AND no xsltId was provided
     if (!el && (!details || !details.xsltId)) {
       if (selector.startsWith('#')) {
         const idToFind = selector.substring(1);
