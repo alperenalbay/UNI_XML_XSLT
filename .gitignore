@@ -32,6 +32,7 @@ coverage
 *.njsproj
 *.sln
 *.sw?
+*.backup
 
 # Local templates directory
 public/templates/
